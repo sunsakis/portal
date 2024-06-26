@@ -42,7 +42,13 @@ async def init(update: Update, context: CallbackContext):
         # Create a Socket.IO client instance
         sio = socketio.Client()
         sio.connect(os.getenv('API'))
-        sio.emit('send_location', {'latitude': user_location.latitude, 'longitude': user_location.longitude})
+        sio.emit(
+            'send_location', {
+                'latitude': user_location.latitude, 
+                'longitude': user_location.longitude,
+                'live_period': user_location.live_period
+            }
+        )
     else:
         await update.message.reply_text('Please share your live location.')
 

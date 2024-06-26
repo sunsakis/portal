@@ -40,3 +40,6 @@ venv/
 
 # installs
 node_modules/
+
+# bot log
+bot/bot.log
