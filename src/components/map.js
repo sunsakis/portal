@@ -10,25 +10,33 @@ import { io } from "socket.io-client";
 const socket = io(process.env.NEXT_PUBLIC_SERVER_URL);
 
 export default function Map() {
-    const [location, setLocation] = useState({ 
-        latitude: 54.697325, 
-        longitude: 25.315356,
-        live_period: null
+    const user_id = 'user_id';
+    const [markers, setMarkers] = useState({
+        [user_id]: { 
+            latitude: 54.697325, 
+            longitude: 25.315356,
+            live_period: null
+        }
     });
 
     useEffect(() => {
-        socket.on("receive_location", (location) => {
-            setLocation({ 
-                latitude: location.latitude, 
-                longitude: location.longitude,
-                live_period: location.live_period
-            });
+        socket.on("receive_location", (data) => {
+            const {
+                latitude,
+                longitude,
+                live_period,
+                user_id
+            } = data;
+            setMarkers(prevMarkers => ({ 
+                ...prevMarkers,
+                [user_id]: { latitude, longitude, live_period }
+            }));
         });
-    }, [socket]); //Empty array to run once on mount
+    }, [socket]); //Run every socket mount
 
     return (
         <MapContainer
-            center={[location.latitude, location.longitude]}
+            center={[markers[user_id].latitude, markers[user_id].longitude]}
             zoom={4}
             style={{ height: "100vh", width: "100%" }}
         >
@@ -36,13 +44,15 @@ export default function Map() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             />
-            {location.live_period && (
-                <Marker position={[location.latitude, location.longitude]}>
+        {Object.entries(markers).map(([user_id, { latitude, longitude, live_period }]) => 
+            live_period && (
+                <Marker key={user_id} position={[latitude, longitude]}>
                     <Popup>
                         A pretty CSS3 popup. <br /> Easily customizable.
                     </Popup>
                 </Marker>
-            )}
+            )
+        )}
         </MapContainer>
     );
 }

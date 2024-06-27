@@ -16,9 +16,9 @@ const io = new Server(server, {
 });
 
 io.on('connection', (socket) => {
-    socket.on('send_location', (location) => {
-        console.log(location);
-        io.emit('receive_location', location);
+    socket.on('send_location', (data) => {
+        console.log(data);
+        io.emit('receive_location', data);
     });
 });
 

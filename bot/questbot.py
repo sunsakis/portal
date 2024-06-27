@@ -46,8 +46,9 @@ async def init(update: Update, context: CallbackContext):
             'send_location', {
                 'latitude': user_location.latitude, 
                 'longitude': user_location.longitude,
-                'live_period': user_location.live_period
-            }
+                'live_period': user_location.live_period,
+                'user_id': update.edited_message.from_user.id
+            },
         )
     else:
         await update.message.reply_text('Please share your live location.')

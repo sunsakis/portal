@@ -43,3 +43,5 @@ node_modules/
 
 # bot log
 bot/bot.log
+.log
+bot.log
