@@ -10,7 +10,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: 'http://localhost:3000',
+        origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
         methods: ['GET', 'POST']
     }
 });
@@ -22,6 +22,8 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(3001, () => {
-    console.log('listening on *:3001');
+const PORT = process.env.PORT || 3001;
+
+server.listen(PORT, () => {
+    console.log(`listening on *:${PORT}`);
 });

@@ -32,7 +32,7 @@ async def init(update: Update, context: CallbackContext):
 
     # Get user to share their quest if they already shared location
     if update.message and update.message.location and update.message.location.live_period:
-        await update.message.reply_text('With location known, to the main point we go - name your challenge. The more fun you offer, the more people will join your quest. Is there a reward for heroes who complete it? Write it out.')
+        await update.message.reply_text('With location known, to the main point we go - name your challenge. The more fun you offer, the more people will join your quest. Is there a reward for those who complete it? Write it out.')
         context.user_data['state'] = 'LOCATION_KNOWN'
 
     # Share live location and quest with API
@@ -41,7 +41,7 @@ async def init(update: Update, context: CallbackContext):
         print(f'updated loc: {user_location}')
         # Create a Socket.IO client instance
         sio = socketio.Client()
-        sio.connect(os.getenv('API'))
+        sio.connect(os.getenv('SERVER_URL') or 'http://localhost:3001')
         sio.emit(
             'send_location', {
                 'latitude': user_location.latitude, 
