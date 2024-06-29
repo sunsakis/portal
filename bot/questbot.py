@@ -41,7 +41,7 @@ async def init(update: Update, context: CallbackContext):
         print(f'updated loc: {user_location}')
         # Create a Socket.IO client instance
         sio = socketio.Client()
-        sio.connect(os.getenv('SERVER_URL') or 'http://localhost:3001')
+        sio.connect(os.getenv('SERVER_URL' or 'http://localhost:3001'))
         sio.emit(
             'send_location', {
                 'latitude': user_location.latitude, 

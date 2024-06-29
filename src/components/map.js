@@ -7,7 +7,7 @@ import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility
 import React, { useEffect, useState } from "react";
 import { io } from "socket.io-client";
 
-const socket = io(process.env.NEXT_PUBLIC_SERVER_URL);
+const socket = io(process.env.SERVER_URL || "http://localhost:3001");
 
 export default function Map() {
     const user_id = 'user_id';
