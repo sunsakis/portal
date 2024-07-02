@@ -42,7 +42,7 @@ export default function Map() {
     return (
         <MapContainer
             center={[markers[user_id].latitude, markers[user_id].longitude]}
-            zoom={4}
+            zoom={6}
             style={{ height: "100vh", width: "100%" }}
         >
             <TileLayer
