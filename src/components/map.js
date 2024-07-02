@@ -7,15 +7,18 @@ import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility
 import React, { useEffect, useState } from "react";
 import { io } from "socket.io-client";
 
-const socket = io("https://questworld-server.onrender.com");
+const socket = io(process.env.NEXT_PUBLIC_SERVER_URL);
 
 export default function Map() {
     const user_id = 'user_id';
+
     const [markers, setMarkers] = useState({
         [user_id]: { 
             latitude: 54.697325, 
             longitude: 25.315356,
-            live_period: null
+            live_period: null,
+            quest: '',
+            username: ''
         }
     });
 
@@ -25,11 +28,13 @@ export default function Map() {
                 latitude,
                 longitude,
                 live_period,
-                user_id
+                user_id,
+                quest,
+                username
             } = data;
             setMarkers(prevMarkers => ({ 
                 ...prevMarkers,
-                [user_id]: { latitude, longitude, live_period }
+                [user_id]: { latitude, longitude, live_period, quest, username }
             }));
         });
     }, [socket]); //Run every socket mount
@@ -44,11 +49,11 @@ export default function Map() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             />
-        {Object.entries(markers).map(([user_id, { latitude, longitude, live_period }]) => 
+        {Object.entries(markers).map(([user_id, { latitude, longitude, live_period, quest, username }]) => 
             live_period && (
                 <Marker key={user_id} position={[latitude, longitude]}>
                     <Popup>
-                        A pretty CSS3 popup. <br /> Easily customizable.
+                        @{username}: {quest}
                     </Popup>
                 </Marker>
             )

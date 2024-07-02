@@ -28,34 +28,47 @@ async def start(update: Update, context: CallbackContext):
         message_id=update.message.message_id
     )
 
-async def init(update: Update, context: CallbackContext):
-
-    # Get user to share their quest if they already shared location
-    if update.message and update.message.location and update.message.location.live_period:
-        await update.message.reply_text('With location known, to the main point we go - name your challenge. The more fun you offer, the more people will join your quest. Is there a reward for those who complete it? Write it out.')
-        context.user_data['state'] = 'LOCATION_KNOWN'
-
-    # Share live location and quest with API
-    elif context.user_data.get('state') == 'LOCATION_KNOWN' and update.edited_message and update.edited_message.location:
+async def handle_location(update: Update, context: CallbackContext):
+    # When a user shares their location
+    if update.edited_message.location:
         user_location = update.edited_message.location
+        if context.user_data.get('state') != 'LOCATION_SHARED' and context.user_data.get('state') != 'QUEST_SHARED':
+            await update.edited_message.reply_text('Great! With location known, to the main point we go - name your challenge. The more fun you offer, the more people will join your quest. Offering a reward? Write it out. 📜')
+            context.user_data['state'] = 'LOCATION_SHARED'
         print(f'updated loc: {user_location}')
-        # Create a Socket.IO client instance
-        sio = socketio.Client()
-        sio.connect(os.getenv('SERVER_URL' or 'http://localhost:3001'))
-        sio.emit(
-            'send_location', {
-                'latitude': user_location.latitude, 
-                'longitude': user_location.longitude,
-                'live_period': user_location.live_period,
-                'user_id': update.edited_message.from_user.id
-            },
-        )
-    else:
-        await update.message.reply_text('Please share your live location.')
+        print(context.user_data['state'])
+        # Create a Socket.IO client instance if quest shared
+        if context.user_data['state'] == 'QUEST_SHARED':
+            print(f'sending data to server with quest: {context.user_data["quest"]}')
+            sio = socketio.Client()
+            sio.connect(os.getenv('SERVER_URL'))
+            sio.emit(
+                'send_location', {
+                    'latitude': user_location.latitude, 
+                    'longitude': user_location.longitude,
+                    'live_period': user_location.live_period,
+                    'user_id': update.edited_message.from_user.id,
+                    'quest': context.user_data['quest'],
+                    'username': update.edited_message.from_user.username
+                },
+            )
+        else:
+            # If the location is not live, request a live location
+            await update.message.reply_text('Please share your live location.')
 
-async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def handle_quest(update: Update, context: CallbackContext):
+    # When the user sends a follow-up message after sharing their location
+    if update.message.text and context.user_data.get('state') == 'LOCATION_SHARED':
+        context.user_data['quest'] = update.message.text  # Store the quest message
+        await update.message.reply_text('Your quest has been shared to the world. Good luck on your journey.')
+        context.user_data['state'] = 'QUEST_SHARED'
+        print(context.user_data['state'])
+
+async def handle_error(update: Update, context: CallbackContext):
     print(f'Update {update} caused error {context.error}')
     logging.error(f'Update {update} caused error {context.error}')
+       
 
 if __name__ == '__main__':
     logging.info('Starting Questworld log...')
@@ -63,7 +76,9 @@ if __name__ == '__main__':
     
     dp = Application.builder().token(TOKEN).build()
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(filters.LOCATION, init))
+    dp.add_handler(MessageHandler(filters.LOCATION, handle_location))
+    dp.add_handler(MessageHandler(filters.TEXT, handle_quest))
+    
 
     dp.run_polling(poll_interval=1)
-    dp.add_error_handler(error)
+    dp.add_error_handler(handle_error)
