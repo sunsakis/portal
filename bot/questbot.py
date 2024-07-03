@@ -20,7 +20,7 @@ TOKEN = os.getenv('TOKEN')
 locations = []
 
 async def start(update: Update, context: CallbackContext):
-    await update.message.reply_text('Click 🧷 icon, then share your 📍 Live Location.')
+    await update.message.reply_text('Click 🧷 icon, then 📍 Location and Share Your Live Location to start.')
     context.user_data['state'] = 'INIT'
 
     # Delete message after response
@@ -34,7 +34,7 @@ async def handle_location(update: Update, context: CallbackContext):
     if update.edited_message.location:
         user_location = update.edited_message.location
         if context.user_data.get('state') != 'LOCATION_SHARED' and context.user_data.get('state') != 'QUEST_SHARED':
-            await update.edited_message.reply_text('What do you need people for? The more fun you offer, the more people will join your quest. Write it out. 📜')
+            await update.edited_message.reply_text('What activity do you want to share? The more fun it is, the more people will join your quest. 📜')
             context.user_data['state'] = 'LOCATION_SHARED'
         print(f'updated loc: {user_location}')
         # Create a Socket.IO client instance if quest shared
@@ -49,7 +49,7 @@ async def handle_location(update: Update, context: CallbackContext):
                     'live_period': user_location.live_period,
                     'user_id': update.edited_message.from_user.id,
                     'quest': context.user_data['quest'],
-                    'username': update.edited_message.from_user.username
+                    'name': update.edited_message.from_user.first_name
                 },
             )
         else:
@@ -63,13 +63,27 @@ async def handle_quest(update: Update, context: CallbackContext):
         context.user_data['quest'] = update.message.text  # Store the quest message
 
         await update.message.reply_text(
-            'Your quest has been shared with the world. Type /start to edit the current quest. Switch off location sharing when done. 🌍',
+            'Your quest has been shared with the world. Type /edit to edit the current quest. Stop Location Sharing when done. 🌍',
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton(text="Open map", url="t.me/QuestworldRobot/Map")]]
             )
         )
         context.user_data['state'] = 'QUEST_SHARED'
         print(context.user_data['state'])
+
+async def edit_quest(update: Update, context: CallbackContext):
+    # Delete message after response
+    await context.bot.delete_message(
+        chat_id=update.message.chat_id,
+        message_id=update.message.message_id
+    )
+    # New function to handle the /edit command
+    if 'quest' in context.user_data:
+        await update.message.reply_text('Please enter the new quest:')
+        context.user_data['state'] = 'LOCATION_SHARED'  # Set state to allow quest editing
+    else:
+        await update.message.reply_text('No quest to edit. Please share your location and create a quest first.')
+
 
 async def handle_error(update: Update, context: CallbackContext):
     print(f'Update {update} caused error {context.error}')
@@ -82,6 +96,7 @@ if __name__ == '__main__':
     
     dp = Application.builder().token(TOKEN).build()
     dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("edit", edit_quest))
     dp.add_handler(MessageHandler(filters.LOCATION, handle_location))
     dp.add_handler(MessageHandler(filters.TEXT, handle_quest))
     

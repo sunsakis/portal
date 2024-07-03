@@ -40,7 +40,7 @@ export default function Map() {
             longitude: 25.315356,
             live_period: null,
             quest: '',
-            username: ''
+            name: ''
         }
     });
 
@@ -52,11 +52,11 @@ export default function Map() {
                 live_period,
                 user_id,
                 quest,
-                username
+                name
             } = data;
             setMarkers(prevMarkers => ({ 
                 ...prevMarkers,
-                [user_id]: { latitude, longitude, live_period, quest, username }
+                [user_id]: { latitude, longitude, live_period, quest, name }
             }));
         });
     }, [socket]); //Run every socket mount
@@ -68,11 +68,11 @@ export default function Map() {
             style={{ height: "100vh", width: "100%" }}
         >
         <MaptilerVectorLayer apiKey={ process.env.NEXT_PUBLIC_MAPTILER_API } />
-            {Object.entries(markers).map(([user_id, { latitude, longitude, live_period, quest, username }]) => 
+            {Object.entries(markers).map(([user_id, { latitude, longitude, live_period, quest, name }]) => 
                 live_period && (
                     <Marker key={user_id} position={[latitude, longitude]}>
                         <Popup>
-                            @{username}: {quest}
+                            {name}: {quest}
                         </Popup>
                     </Marker>
                 )
