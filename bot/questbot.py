@@ -20,7 +20,7 @@ TOKEN = os.getenv('TOKEN')
 locations = []
 
 async def start(update: Update, context: CallbackContext):
-    await update.message.reply_text('Stop! Who would cross into World of Quest must answer me one question only, but first share your live location for me and other travellers to see.')
+    await update.message.reply_text('Click 🧷 icon, then share your 📍 Live Location.')
     context.user_data['state'] = 'INIT'
 
     # Delete message after response
@@ -34,7 +34,7 @@ async def handle_location(update: Update, context: CallbackContext):
     if update.edited_message.location:
         user_location = update.edited_message.location
         if context.user_data.get('state') != 'LOCATION_SHARED' and context.user_data.get('state') != 'QUEST_SHARED':
-            await update.edited_message.reply_text('Great! With location known, to the main point we go - name your challenge. The more fun you offer, the more people will join your quest. Offering a reward? Write it out. 📜')
+            await update.edited_message.reply_text('What do you need people for? The more fun you offer, the more people will join your quest. Write it out. 📜')
             context.user_data['state'] = 'LOCATION_SHARED'
         print(f'updated loc: {user_location}')
         # Create a Socket.IO client instance if quest shared
@@ -63,9 +63,9 @@ async def handle_quest(update: Update, context: CallbackContext):
         context.user_data['quest'] = update.message.text  # Store the quest message
 
         await update.message.reply_text(
-            'Your quest has been shared to the world. Good luck on your journey.',
+            'Your quest has been shared with the world. Type /start to edit the current quest. Switch off location sharing when done. 🌍',
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton(text="Launch Questworld", url="t.me/QuestworldRobot/Map")]]
+                [[InlineKeyboardButton(text="Open map", url="t.me/QuestworldRobot/Map")]]
             )
         )
         context.user_data['state'] = 'QUEST_SHARED'
