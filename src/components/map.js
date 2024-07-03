@@ -1,13 +1,35 @@
 'use client'
 
 import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, Marker, Popup, useMap } from "react-leaflet";
 import "leaflet-defaulticon-compatibility";
 import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css";
 import React, { useEffect, useState } from "react";
 import { io } from "socket.io-client";
+import { MaptilerLayer } from "@maptiler/leaflet-maptilersdk";
 
 const socket = io(process.env.NEXT_PUBLIC_SERVER_URL);
+
+const MaptilerVectorLayer = ({ apiKey }) => {
+    const map = useMap();
+  
+    useEffect(() => {
+      // Create and add the Maptiler layer to the map
+      const mtLayer = new MaptilerLayer({
+        apiKey: apiKey, // Use the apiKey prop passed to the component
+      });
+      mtLayer.addTo(map);
+  
+      // Cleanup function to remove the layer when the component unmounts
+      return () => {
+        if (map.hasLayer(mtLayer)) {
+          map.removeLayer(mtLayer);
+        }
+      };
+    }, [map, apiKey]); // Dependencies array ensures this runs only when map instance or apiKey changes
+  
+    return null; // This component does not render anything itself
+  };
 
 export default function Map() {
     const user_id = 'user_id';
@@ -42,22 +64,19 @@ export default function Map() {
     return (
         <MapContainer
             center={[markers[user_id].latitude, markers[user_id].longitude]}
-            zoom={6}
+            zoom={12}
             style={{ height: "100vh", width: "100%" }}
         >
-            <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            />
-        {Object.entries(markers).map(([user_id, { latitude, longitude, live_period, quest, username }]) => 
-            live_period && (
-                <Marker key={user_id} position={[latitude, longitude]}>
-                    <Popup>
-                        @{username}: {quest}
-                    </Popup>
-                </Marker>
-            )
-        )}
+        <MaptilerVectorLayer apiKey={ process.env.NEXT_PUBLIC_MAPTILER_API } />
+            {Object.entries(markers).map(([user_id, { latitude, longitude, live_period, quest, username }]) => 
+                live_period && (
+                    <Marker key={user_id} position={[latitude, longitude]}>
+                        <Popup>
+                            @{username}: {quest}
+                        </Popup>
+                    </Marker>
+                )
+            )}
         </MapContainer>
     );
 }
