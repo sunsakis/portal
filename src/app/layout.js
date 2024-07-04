@@ -4,8 +4,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "Questworld",
-  description: "Real world quests for real world rewards",
+  title: "Map Your Quest",
+  description: "Become the main character by teaming up with others, completing quests and leveling up in real life.",
 };
 
 export default function RootLayout({ children }) {

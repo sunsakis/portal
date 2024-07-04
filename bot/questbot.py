@@ -63,9 +63,9 @@ async def handle_quest(update: Update, context: CallbackContext):
         context.user_data['quest'] = update.message.text  # Store the quest message
 
         await update.message.reply_text(
-            'Your quest has been shared with the world. Type /edit to edit the current quest. Stop Location Sharing when done. 🌍',
+            'Your quest has been shared with the world. You can /edit it or Stop Location Sharing if finished. 🌍',
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton(text="Open map", url="t.me/QuestworldRobot/Map")]]
+                [[InlineKeyboardButton(text="Open map", url="t.me/MapYourQuestBot/map")]]
             )
         )
         context.user_data['state'] = 'QUEST_SHARED'
