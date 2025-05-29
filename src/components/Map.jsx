@@ -12,221 +12,147 @@ import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility
 
 const socket = io(import.meta.env.VITE_SERVER_URL || 'http://localhost:3001')
 
-// Z-Index hierarchy constants - Updated for Leaflet's high z-index values
-const Z_INDEX = {
-  MAP_BASE: 0,                    // Map tiles
-  MAP_PANES: 200,                 // Leaflet panes (overlayPane, etc.)
-  MAP_MARKERS: 600,               // Leaflet markers
-  MAP_POPUPS: 1000,               // Leaflet popups
-  MAP_TOOLTIPS: 1500,             // Leaflet tooltips
-  MAP_CONTROLS: 2000,             // Leaflet controls (zoom, attribution, etc.)
-  PIN_INDICATOR: 5000,            // Pin placement indicator - must be above all map elements
-  UI_CONTROLS: 6000,              // App UI controls
-  INSTRUCTIONS: 7000,             // Instructions overlay
-  BOTTOM_SHEET_BACKDROP: 8000,    // Bottom sheet backdrop
-  BOTTOM_SHEET: 9000,             // Bottom sheet content
-  NOTIFICATIONS: 10000,           // Top notifications
-  MODAL_OVERLAY: 11000            // Emergency modals/alerts
+// Mobile detection utility
+const isMobileDevice = () => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+         window.innerWidth <= 768 ||
+         'ontouchstart' in window
 }
 
-// Custom hook for handling long press to place pins
-const PinPlacer = ({ onPinPlace, isEnabled }) => {
+// Custom hook for geolocation
+const useGeolocation = () => {
+  const [location, setLocation] = useState(null)
+  const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  const getCurrentLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by this browser')
+      return Promise.reject('Geolocation not supported')
+    }
+
+    setLoading(true)
+    setError(null)
+
+    return new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const newLocation = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          }
+          setLocation(newLocation)
+          setLoading(false)
+          resolve(newLocation)
+        },
+        (error) => {
+          let errorMessage = 'Unable to get your location'
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = 'Location access denied. Please enable location permissions.'
+              break
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = 'Location information is unavailable.'
+              break
+            case error.TIMEOUT:
+              errorMessage = 'Location request timed out.'
+              break
+          }
+          setError(errorMessage)
+          setLoading(false)
+          reject(error)
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000 // 5 minutes
+        }
+      )
+    })
+  }, [])
+
+  return { location, error, loading, getCurrentLocation }
+}
+
+// Toast notification component
+const Toast = ({ message, type = 'info', onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 4000)
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  const bgColor = {
+    success: 'bg-green-500',
+    error: 'bg-red-500',
+    info: 'bg-blue-500',
+    warning: 'bg-orange-500'
+  }[type]
+
+  return (
+    <motion.div
+      initial={{ y: -100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: -100, opacity: 0 }}
+      className={`fixed top-4 left-4 right-4 ${bgColor} text-white px-4 py-3 rounded-lg shadow-lg max-w-sm mx-auto`}
+      style={{ zIndex: 2000 }}
+    >
+      <div className="flex items-center gap-2">
+        <span>{type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️'}</span>
+        <span className="text-sm">{message}</span>
+        <button onClick={onClose} className="ml-auto text-white/80 hover:text-white">
+          ✕
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
+// Map event handler for double taps
+const MapEventHandler = ({ onDoubleTap }) => {
   const map = useMap()
-  const longPressTimer = useRef(null)
-  const [isLongPressing, setIsLongPressing] = useState(false)
-  const [pressPosition, setPressPosition] = useState(null)
-  const [screenPosition, setScreenPosition] = useState(null)
+  const lastTapRef = useRef(0)
+  const tapTimeoutRef = useRef(null)
 
   useMapEvents({
-    mousedown: (e) => {
-      if (!isEnabled) return
-      
-      setPressPosition(e.latlng)
-      setScreenPosition(e.containerPoint)
-      setIsLongPressing(false)
-      
-      longPressTimer.current = setTimeout(() => {
-        setIsLongPressing(true)
-        navigator.vibrate?.(100) // Haptic feedback
-        onPinPlace(e.latlng)
-      }, 600) // 600ms for long press
-    },
-    
-    mouseup: () => {
-      if (longPressTimer.current) {
-        clearTimeout(longPressTimer.current)
-        longPressTimer.current = null
+    click: (e) => {
+      if (!isMobileDevice()) return
+
+      const now = Date.now()
+      const timeSinceLastTap = now - lastTapRef.current
+
+      if (timeSinceLastTap < 300) {
+        // Double tap detected
+        clearTimeout(tapTimeoutRef.current)
+        onDoubleTap(e)
+      } else {
+        // Single tap - wait to see if another tap comes
+        tapTimeoutRef.current = setTimeout(() => {
+          // Single tap confirmed (no double tap)
+        }, 300)
       }
-      setTimeout(() => {
-        setIsLongPressing(false)
-        setPressPosition(null)
-        setScreenPosition(null)
-      }, 100)
-    },
-    
-    mousemove: (e) => {
-      // Update screen position for accurate indicator placement
-      if (pressPosition && longPressTimer.current) {
-        setScreenPosition(e.containerPoint)
-        
-        // Cancel long press if user moves finger too much
-        const distance = map.distance(pressPosition, e.latlng)
-        if (distance > 50) { // 50 meters tolerance
-          clearTimeout(longPressTimer.current)
-          longPressTimer.current = null
-          setIsLongPressing(false)
-          setPressPosition(null)
-          setScreenPosition(null)
-        }
-      }
+
+      lastTapRef.current = now
     }
   })
 
-  // Show visual feedback during long press - positioned at actual touch point
-  return isLongPressing && screenPosition ? (
-    <motion.div
-      initial={{ scale: 0, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      className="pin-placement-indicator fixed pointer-events-none"
-      style={{
-        left: screenPosition.x,
-        top: screenPosition.y,
-        transform: 'translate(-50%, -50%)',
-        zIndex: Z_INDEX.PIN_INDICATOR
-      }}
-    >
-      <div className="w-8 h-8 bg-red-500 rounded-full border-2 border-white shadow-lg animate-pulse" />
-    </motion.div>
-  ) : null
+  return null
 }
 
-const MapControls = ({ onLocationRequest, onPinModeToggle, isPinMode }) => {
+const MapControls = () => {
   const map = useMap()
-  const [isLocating, setIsLocating] = useState(false)
   
   useEffect(() => {
     map.doubleClickZoom.disable()
-    // Position zoom controls to avoid conflicts with our UI
-    // Leaflet controls have z-index around 1000-2000, our UI is at 6000+
-    const zoomControl = L.control.zoom({ position: 'bottomleft' })
+    const zoomControl = L.control.zoom({ position: 'bottomright' })
     map.addControl(zoomControl)
     return () => map.removeControl(zoomControl)
   }, [map])
-
-  const handleLocateUser = useCallback(() => {
-    setIsLocating(true)
-    navigator.geolocation?.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords
-        map.setView([latitude, longitude], 16)
-        onLocationRequest(latitude, longitude)
-        setIsLocating(false)
-      },
-      (error) => {
-        console.log('Location access denied or unavailable')
-        setIsLocating(false)
-        alert('Location access is needed to find your position. Please enable location in your browser settings.')
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    )
-  }, [map, onLocationRequest])
   
-  return (
-    <>
-      {/* Location Button */}
-      <motion.button
-        onClick={handleLocateUser}
-        disabled={isLocating}
-        className="fixed bottom-32 right-4 bg-white hover:bg-gray-50 text-gray-700 p-3 rounded-full shadow-lg border border-gray-200"
-        style={{ zIndex: Z_INDEX.UI_CONTROLS }}
-        whileTap={{ scale: 0.95 }}
-        whileHover={{ scale: 1.05 }}
-      >
-        {isLocating ? (
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            className="text-lg"
-          >
-            ⟳
-          </motion.div>
-        ) : (
-          <div className="text-lg">📍</div>
-        )}
-      </motion.button>
-
-      {/* Pin Mode Toggle */}
-      <motion.button
-        onClick={onPinModeToggle}
-        className={`fixed bottom-20 right-4 p-3 rounded-full shadow-lg border transition-colors ${
-          isPinMode 
-            ? 'bg-red-500 text-white border-red-600' 
-            : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
-        }`}
-        style={{ zIndex: Z_INDEX.UI_CONTROLS }}
-        whileTap={{ scale: 0.95 }}
-        whileHover={{ scale: 1.05 }}
-      >
-        <div className="text-lg">📌</div>
-      </motion.button>
-
-      {/* Instructions overlay */}
-      <AnimatePresence>
-        {isPinMode && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed top-20 left-4 right-4 bg-black bg-opacity-80 text-white p-4 rounded-lg"
-            style={{ zIndex: Z_INDEX.INSTRUCTIONS }}
-          >
-            <div className="text-center">
-              <div className="text-lg mb-2">📌 Pin Mode Active</div>
-              <div className="text-sm">Long press on the map to place a pin</div>
-              <div className="text-xs text-gray-300 mt-1">Tap the pin button again to exit</div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
-  )
+  return null
 }
 
-// Enhanced map layers with better fallback
-const MapLayers = ({ maptilerApiKey }) => {
-  const map = useMap()
-  const [useOSM, setUseOSM] = useState(false)
-
-  // If no API key or we decided to use OSM, show OpenStreetMap
-  if (!maptilerApiKey || useOSM) {
-    return (
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        maxZoom={19}
-      />
-    )
-  }
-
-  return (
-    <>
-      <MapTilerLayer apiKey={maptilerApiKey} map={map} />
-      {/* Fallback to OSM if MapTiler fails */}
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        maxZoom={19}
-        eventHandlers={{
-          tileerror: () => {
-            console.log('Falling back to OpenStreetMap')
-            setUseOSM(true)
-          }
-        }}
-      />
-    </>
-  )
-}
-
+// Proper MapTiler integration using Leaflet plugin
 const MapTilerLayer = ({ apiKey, map }) => {
   useEffect(() => {
     if (!apiKey || !map) return
@@ -256,6 +182,39 @@ const MapTilerLayer = ({ apiKey, map }) => {
   return null
 }
 
+// Enhanced map layers with better fallback
+const MapLayers = ({ maptilerApiKey }) => {
+  const map = useMap()
+  const [useOSM, setUseOSM] = useState(false)
+
+  if (!maptilerApiKey || useOSM) {
+    return (
+      <TileLayer
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        maxZoom={19}
+      />
+    )
+  }
+
+  return (
+    <>
+      <MapTilerLayer apiKey={maptilerApiKey} map={map} />
+      <TileLayer
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        maxZoom={19}
+        eventHandlers={{
+          tileerror: () => {
+            console.log('Falling back to OpenStreetMap')
+            setUseOSM(true)
+          }
+        }}
+      />
+    </>
+  )
+}
+
 const BottomSheet = ({ isOpen, onClose, children }) => {
   const bind = useDrag(
     ({ last, velocity: [, vy], direction: [, dy], movement: [, my] }) => {
@@ -275,7 +234,7 @@ const BottomSheet = ({ isOpen, onClose, children }) => {
             animate={{ opacity: 0.5 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black"
-            style={{ zIndex: Z_INDEX.BOTTOM_SHEET_BACKDROP }}
+            style={{ zIndex: 1800 }}
             onClick={onClose}
           />
           <motion.div
@@ -285,10 +244,7 @@ const BottomSheet = ({ isOpen, onClose, children }) => {
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl touch-none"
-            style={{ 
-              maxHeight: '70vh',
-              zIndex: Z_INDEX.BOTTOM_SHEET
-            }}
+            style={{ maxHeight: '70vh', zIndex: 1900 }}
           >
             <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-4" />
             <div className="px-4 pb-8 overflow-y-auto max-h-full">
@@ -301,15 +257,30 @@ const BottomSheet = ({ isOpen, onClose, children }) => {
   )
 }
 
+// Custom marker icon for user's location
+const createUserLocationIcon = () => {
+  return L.divIcon({
+    html: `
+      <div class="user-location-wrapper">
+        <div class="user-location-pulse"></div>
+        <div class="user-location-dot"></div>
+      </div>
+    `,
+    className: 'user-location-marker',
+    iconSize: [20, 20],
+    iconAnchor: [10, 10]
+  })
+}
+
 export default function Map() {
   const user_id = 'user_id'
-  const [userLocation, setUserLocation] = useState(null)
-  const [isSharing, setIsSharing] = useState(false)
   const [showBottomSheet, setShowBottomSheet] = useState(false)
   const [selectedMarker, setSelectedMarker] = useState(null)
-  const [locationRequested, setLocationRequested] = useState(false)
-  const [isPinMode, setIsPinMode] = useState(false)
-  const [customPins, setCustomPins] = useState([])
+  const [toasts, setToasts] = useState([])
+  const [userPin, setUserPin] = useState(null)
+  const [isPlacingPin, setIsPlacingPin] = useState(false)
+  
+  const { location, error, loading, getCurrentLocation } = useGeolocation()
   
   // Default to Vilnius coordinates
   const defaultLocation = { latitude: 54.697325, longitude: 25.315356 }
@@ -323,28 +294,15 @@ export default function Map() {
     }
   })
 
-  // Try to get user location once on mount
-  useEffect(() => {
-    if (locationRequested) return
-    
-    navigator.geolocation?.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords
-        setUserLocation({ latitude, longitude })
-        setMarkers(prev => ({
-          ...prev,
-          [user_id]: { ...prev[user_id], latitude, longitude }
-        }))
-      },
-      (error) => {
-        console.log('Location not available, using default location')
-        setUserLocation(defaultLocation)
-      },
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
-    )
-    
-    setLocationRequested(true)
-  }, [user_id, locationRequested])
+  // Add toast utility
+  const addToast = useCallback((message, type = 'info') => {
+    const id = Date.now()
+    setToasts(prev => [...prev, { id, message, type }])
+  }, [])
+
+  const removeToast = useCallback((id) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id))
+  }, [])
 
   useEffect(() => {
     socket.on("receive_location", (data) => {
@@ -358,115 +316,149 @@ export default function Map() {
     return () => socket.off("receive_location")
   }, [])
 
-  const handleLocationShare = useCallback(() => {
-    setIsSharing(true)
-    
-    navigator.geolocation?.getCurrentPosition((position) => {
-      const { latitude, longitude } = position.coords
-      const locationData = {
-        latitude, longitude,
-        live_period: Date.now(),
-        user_id,
-        quest: 'Available for chat',
-        name: 'You'
-      }
-      
-      socket.emit('send_location', locationData)
-      setMarkers(prev => ({ ...prev, [user_id]: locationData }))
-      setIsSharing(false)
-      navigator.vibrate?.(100)
-    }, (error) => {
-      console.log('Location sharing failed')
-      setIsSharing(false)
-      alert('Please enable location access to share your position')
-    })
-  }, [user_id])
-
   const handleMarkerClick = useCallback((marker, userId) => {
     setSelectedMarker({ ...marker, userId })
     setShowBottomSheet(true)
   }, [])
 
-  const handleLocationRequest = useCallback((latitude, longitude) => {
-    setUserLocation({ latitude, longitude })
-    setMarkers(prev => ({
-      ...prev,
-      [user_id]: { ...prev[user_id], latitude, longitude }
-    }))
-  }, [user_id])
-
-  const handlePinModeToggle = useCallback(() => {
-    setIsPinMode(prev => !prev)
-  }, [])
-
-  const handlePinPlace = useCallback((latlng) => {
-    const newPin = {
-      id: Date.now(),
-      latitude: latlng.lat,
-      longitude: latlng.lng,
-      title: 'Custom Pin',
-      description: 'Added by you',
-      timestamp: new Date().toISOString()
+  const handleDoubleTap = useCallback(async (e) => {
+    if (!isMobileDevice()) {
+      addToast('This action is only available on mobile devices', 'warning')
+      return
     }
-    
-    setCustomPins(prev => [...prev, newPin])
-    setIsPinMode(false) // Exit pin mode after placing
-    
-    // Optional: Auto-open bottom sheet for the new pin
-    setSelectedMarker(newPin)
-    setShowBottomSheet(true)
-    
-    console.log('Pin placed at:', latlng)
-  }, [])
 
-  // Use user location if available, otherwise use default
-  const centerPosition = userLocation 
-    ? [userLocation.latitude, userLocation.longitude]
-    : [defaultLocation.latitude, defaultLocation.longitude]
+    setIsPlacingPin(true)
+    addToast('Getting your location...', 'info')
+
+    try {
+      const userLocation = await getCurrentLocation()
+      
+      // Create user pin at GPS location
+      const newPin = {
+        id: 'user-location',
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        accuracy: userLocation.accuracy,
+        timestamp: Date.now()
+      }
+
+      setUserPin(newPin)
+
+      // Send location to socket
+      socket.emit('send_location', {
+        user_id,
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        live_period: Date.now() + 300000, // 5 minutes from now
+        quest: 'Available for chat',
+        name: 'You'
+      })
+
+      addToast(`Pin placed! Accuracy: ${Math.round(userLocation.accuracy)}m`, 'success')
+      
+    } catch (err) {
+      console.error('Location error:', err)
+      addToast(error || 'Could not get your location', 'error')
+    } finally {
+      setIsPlacingPin(false)
+    }
+  }, [getCurrentLocation, addToast, error, user_id])
+
+  // Use default location as center
+  const centerPosition = [defaultLocation.latitude, defaultLocation.longitude]
 
   return (
     <div className="relative h-screen w-full overflow-hidden">
+      {/* Toast notifications */}
+      <AnimatePresence>
+        {toasts.map(toast => (
+          <Toast
+            key={toast.id}
+            message={toast.message}
+            type={toast.type}
+            onClose={() => removeToast(toast.id)}
+          />
+        ))}
+      </AnimatePresence>
+
+      {/* Loading overlay for pin placement */}
+      {isPlacingPin && (
+        <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 2100, backgroundColor: 'rgba(0,0,0,0.3)' }}>
+          <div className="bg-white rounded-lg p-6 flex items-center gap-3 shadow-xl">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+            <span>Getting your location...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Instructions overlay for mobile */}
+      {isMobileDevice() && !userPin && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1 }}
+          className="absolute top-4 left-4 right-4 bg-blue-500 text-white px-4 py-3 rounded-lg shadow-lg"
+          style={{ zIndex: 1500 }}
+        >
+          <div className="flex items-center gap-2">
+            <span>👆</span>
+            <span className="text-sm">Double tap anywhere on the map to place your location pin</span>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Desktop message */}
+      {!isMobileDevice() && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-4 left-4 right-4 bg-orange-500 text-white px-4 py-3 rounded-lg shadow-lg max-w-md mx-auto"
+          style={{ zIndex: 1500 }}
+        >
+          <div className="flex items-center gap-2">
+            <span>📱</span>
+            <span className="text-sm">Pin placement is only available on mobile devices</span>
+          </div>
+        </motion.div>
+      )}
+
       <MapContainer
         center={centerPosition}
         zoom={13}
         style={{ height: "100%", width: "100%" }}
         zoomControl={false}
         attributionControl={true}
+        doubleClickZoom={false}
       >
         <MapLayers maptilerApiKey={import.meta.env.VITE_MAPTILER_API} />
-        <PinPlacer onPinPlace={handlePinPlace} isEnabled={isPinMode} />
-        <MapControls 
-          onLocationRequest={handleLocationRequest}
-          onPinModeToggle={handlePinModeToggle}
-          isPinMode={isPinMode}
-        />
+        <MapControls />
+        <MapEventHandler onDoubleTap={handleDoubleTap} />
         
-        {/* Share Location Button */}
-        <motion.button
-          onClick={handleLocationShare}
-          disabled={isSharing}
-          className="fixed bottom-4 right-4 bg-blue-500 hover:bg-blue-600 text-white p-4 rounded-full shadow-lg"
-          style={{ zIndex: Z_INDEX.UI_CONTROLS }}
-          whileTap={{ scale: 0.95 }}
-          whileHover={{ scale: 1.05 }}
-        >
-          {isSharing ? (
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-              className="text-lg"
-            >
-              📡
-            </motion.div>
-          ) : (
-            <div className="text-lg">📡</div>
-          )}
-        </motion.button>
+        {/* User's location pin */}
+        {userPin && (
+          <Marker 
+            position={[userPin.latitude, userPin.longitude]}
+            icon={createUserLocationIcon()}
+          >
+            <Popup>
+              <div className="p-2">
+                <strong className="block text-sm text-blue-600">Your Location</strong>
+                <span className="text-xs text-gray-600">
+                  Accuracy: {Math.round(userPin.accuracy)}m
+                </span>
+                <br />
+                <span className="text-xs text-gray-500">
+                  {new Date(userPin.timestamp).toLocaleTimeString()}
+                </span>
+              </div>
+            </Popup>
+          </Marker>
+        )}
         
-        {/* Live location markers */}
+        {/* Other markers */}
         {Object.entries(markers).map(([userId, marker]) => {
           const { latitude, longitude, live_period, quest, name } = marker
-          return live_period && (
+          return live_period && userId !== user_id && (
             <Marker 
               key={userId} 
               position={[latitude, longitude]}
@@ -483,62 +475,35 @@ export default function Map() {
             </Marker>
           )
         })}
-
-        {/* Custom pins */}
-        {customPins.map((pin) => (
-          <Marker 
-            key={pin.id} 
-            position={[pin.latitude, pin.longitude]}
-            eventHandlers={{
-              click: () => handleMarkerClick(pin, `custom_${pin.id}`)
-            }}
-          >
-            <Popup>
-              <div className="p-2">
-                <strong className="block text-sm">{pin.title}</strong>
-                <span className="text-xs text-gray-600">{pin.description}</span>
-                <div className="text-xs text-gray-400 mt-1">
-                  {new Date(pin.timestamp).toLocaleString()}
-                </div>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
       </MapContainer>
 
       <BottomSheet isOpen={showBottomSheet} onClose={() => setShowBottomSheet(false)}>
         {selectedMarker && (
           <div className="p-4">
-            <h3 className="text-lg font-semibold mb-2">
-              {selectedMarker.name || selectedMarker.title || 'Location'}
-            </h3>
-            <p className="text-gray-600 mb-4">
-              {selectedMarker.quest || selectedMarker.description || 'No description'}
-            </p>
-            
-            {selectedMarker.userId?.startsWith('custom_') ? (
-              <div className="space-y-2">
-                <button 
-                  className="w-full bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600"
-                  onClick={() => {
-                    setCustomPins(prev => prev.filter(p => p.id !== selectedMarker.id))
-                    setShowBottomSheet(false)
-                  }}
-                >
-                  Remove Pin
-                </button>
-                <button className="w-full bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300">
-                  Edit Pin
-                </button>
-              </div>
-            ) : (
-              <button className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600">
-                Start Chat
-              </button>
-            )}
+            <h3 className="text-lg font-semibold mb-2">{selectedMarker.name}</h3>
+            <p className="text-gray-600 mb-4">{selectedMarker.quest}</p>
+            <button className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600">
+              Start Chat
+            </button>
           </div>
         )}
       </BottomSheet>
+
+      {/* Pin removal button when user has placed a pin */}
+      {userPin && (
+        <motion.button
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          className="absolute bottom-20 right-4 bg-red-500 text-white p-3 rounded-full shadow-lg"
+          style={{ zIndex: 1600 }}
+          onClick={() => {
+            setUserPin(null)
+            addToast('Location pin removed', 'info')
+          }}
+        >
+          <span className="text-lg">📍❌</span>
+        </motion.button>
+      )}
     </div>
   )
 }

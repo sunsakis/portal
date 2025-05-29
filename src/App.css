@@ -45,8 +45,116 @@ body {
   margin: 2px !important;
 }
 
+/* User location marker styles */
+.user-location-marker {
+  background: transparent !important;
+  border: none !important;
+  z-index: 1000 !important;
+}
+
+.user-location-wrapper {
+  position: relative;
+  width: 20px;
+  height: 20px;
+}
+
+.user-location-dot {
+  width: 20px;
+  height: 20px;
+  background: #3b82f6;
+  border: 3px solid white;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1002;
+}
+
+.user-location-pulse {
+  position: absolute;
+  top: -15px;
+  left: -15px;
+  width: 50px;
+  height: 50px;
+  background: rgba(59, 130, 246, 0.2);
+  border-radius: 50%;
+  animation: userLocationPulse 2s infinite;
+  z-index: 1001;
+}
+
+@keyframes userLocationPulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* Mobile-specific enhancements */
+@media (max-width: 768px) {
+  .leaflet-control-zoom a {
+    width: 44px !important;
+    height: 44px !important;
+    line-height: 42px !important;
+    font-size: 20px !important;
+  }
+  
+  .leaflet-popup-content {
+    font-size: 16px;
+    min-width: 200px;
+  }
+  
+  .leaflet-popup-close-button {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 20px !important;
+  }
+}
+
+/* Touch improvements for mobile */
+@media (hover: none) and (pointer: coarse) {
+  .leaflet-container {
+    touch-action: pan-x pan-y pinch-zoom;
+  }
+  
+  .leaflet-marker-icon {
+    cursor: pointer;
+  }
+}
+
 @media (display-mode: standalone) {
   body {
     padding-top: max(env(safe-area-inset-top), 20px);
   }
+}
+
+/* Prevent text selection on map interactions */
+.leaflet-container {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Custom scrollbar for bottom sheet */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 4px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 2px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 2px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
