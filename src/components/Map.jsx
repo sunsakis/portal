@@ -418,7 +418,7 @@ export default function Map() {
           >
             <Popup>
               <div className="p-2">
-                <strong className="block text-sm text-blue-600">Your Location</strong>
+                <strong className="block text-sm text-green-600">Your Location</strong>
                 <span className="text-xs text-gray-600">
                   Accuracy: {Math.round(userPin.accuracy)}m
                 </span>
@@ -469,7 +469,7 @@ export default function Map() {
       <motion.button
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
-        className={`fixed bottom-16 left-1/3 transform -translate-x-1/2 ${
+        className={`fixed bottom-14 left-1/3 transform -translate-x-1/2 ${
           userPin 
             ? 'bg-red-500 hover:bg-red-600 opacity-30' 
             : 'bg-green-500 hover:bg-green-600 opacity-80'
