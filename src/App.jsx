@@ -29,16 +29,19 @@ function App() {
   return (
     <div className="App">
       <NetworkStatus />
+      
+      {/* Use enhanced Map with vector support */}
       <Map />
+      
       <InstallPrompt />
       
       {updateAvailable && (
-        <div className="fixed top-4 left-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50">
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50">
           <div className="flex items-center justify-between">
             <span className="text-sm">New version available!</span>
             <button
               onClick={() => window.location.reload()}
-              className="text-xs bg-white text-blue-500 px-2 py-1 rounded"
+              className="text-xs bg-white text-blue-500 px-2 py-1 rounded ml-3"
             >
               Update
             </button>

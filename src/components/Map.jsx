@@ -35,7 +35,6 @@ const MapControls = ({ onLocationRequest }) => {
       (error) => {
         console.log('Location access denied or unavailable')
         setIsLocating(false)
-        // Show user-friendly message
         alert('Location access is needed to find your position. Please enable location in your browser settings.')
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
@@ -65,29 +64,23 @@ const MapControls = ({ onLocationRequest }) => {
   )
 }
 
-// Fallback to OpenStreetMap if MapTiler fails
-const MapLayers = ({ maptilerApiKey }) => {
-  const map = useMap()
-  const [useOSM, setUseOSM] = useState(false)
-
+// Proper MapTiler integration using Leaflet plugin
+const MapTilerLayer = ({ apiKey, map }) => {
   useEffect(() => {
-    if (!maptilerApiKey || useOSM) {
-      // Use OpenStreetMap as fallback
-      return
-    }
+    if (!apiKey || !map) return
 
     try {
-      const mtLayer = new MaptilerLayer({ apiKey: maptilerApiKey })
-      
-      mtLayer.on('tileerror', () => {
-        console.log('MapTiler failed, switching to OpenStreetMap')
-        setUseOSM(true)
-        if (map.hasLayer(mtLayer)) {
-          map.removeLayer(mtLayer)
-        }
+      const mtLayer = new MaptilerLayer({
+        apiKey: apiKey,
+        style: 'streets-v2' // You can change this to other styles
       })
       
       mtLayer.addTo(map)
+      
+      // Handle ready event
+      mtLayer.on('ready', () => {
+        console.log('MapTiler layer loaded successfully!')
+      })
       
       return () => {
         if (map.hasLayer(mtLayer)) {
@@ -95,22 +88,46 @@ const MapLayers = ({ maptilerApiKey }) => {
         }
       }
     } catch (error) {
-      console.log('MapTiler error, using OpenStreetMap:', error)
-      setUseOSM(true)
+      console.log('MapTiler layer failed to load:', error)
     }
-  }, [map, maptilerApiKey, useOSM])
+  }, [apiKey, map])
 
-  // Render OSM tile layer if MapTiler failed or no API key
+  return null
+}
+
+// Enhanced map layers with better fallback
+const MapLayers = ({ maptilerApiKey }) => {
+  const map = useMap()
+  const [useOSM, setUseOSM] = useState(false)
+
+  // If no API key or we decided to use OSM, show OpenStreetMap
   if (!maptilerApiKey || useOSM) {
     return (
       <TileLayer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        maxZoom={19}
       />
     )
   }
 
-  return null
+  return (
+    <>
+      <MapTilerLayer apiKey={maptilerApiKey} map={map} />
+      {/* Fallback to OSM if MapTiler fails */}
+      <TileLayer
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        maxZoom={19}
+        eventHandlers={{
+          tileerror: () => {
+            console.log('Falling back to OpenStreetMap')
+            setUseOSM(true)
+          }
+        }}
+      />
+    </>
+  )
 }
 
 const BottomSheet = ({ isOpen, onClose, children }) => {
@@ -162,7 +179,7 @@ export default function Map() {
   const [selectedMarker, setSelectedMarker] = useState(null)
   const [locationRequested, setLocationRequested] = useState(false)
   
-  // Default to Vilnius coordinates (from your original setup)
+  // Default to Vilnius coordinates
   const defaultLocation = { latitude: 54.697325, longitude: 25.315356 }
   
   const [markers, setMarkers] = useState({
@@ -174,7 +191,7 @@ export default function Map() {
     }
   })
 
-  // Try to get user location once on mount, but don't block if denied
+  // Try to get user location once on mount
   useEffect(() => {
     if (locationRequested) return
     
@@ -189,7 +206,6 @@ export default function Map() {
       },
       (error) => {
         console.log('Location not available, using default location')
-        // Don't show error - just use default location
         setUserLocation(defaultLocation)
       },
       { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
@@ -264,6 +280,27 @@ export default function Map() {
         <MapLayers maptilerApiKey={import.meta.env.VITE_MAPTILER_API} />
         <MapControls onLocationRequest={handleLocationRequest} />
         
+        {/* Share Location Button */}
+        <motion.button
+          onClick={handleLocationShare}
+          disabled={isSharing}
+          className="fixed bottom-4 right-4 z-10 bg-blue-500 hover:bg-blue-600 text-white p-4 rounded-full shadow-lg"
+          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.05 }}
+        >
+          {isSharing ? (
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+              className="text-lg"
+            >
+              📡
+            </motion.div>
+          ) : (
+            <div className="text-lg">📡</div>
+          )}
+        </motion.button>
+        
         {Object.entries(markers).map(([userId, marker]) => {
           const { latitude, longitude, live_period, quest, name } = marker
           return live_period && (
@@ -284,6 +321,18 @@ export default function Map() {
           )
         })}
       </MapContainer>
+
+      <BottomSheet isOpen={showBottomSheet} onClose={() => setShowBottomSheet(false)}>
+        {selectedMarker && (
+          <div className="p-4">
+            <h3 className="text-lg font-semibold mb-2">{selectedMarker.name}</h3>
+            <p className="text-gray-600 mb-4">{selectedMarker.quest}</p>
+            <button className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600">
+              Start Chat
+            </button>
+          </div>
+        )}
+      </BottomSheet>
     </div>
   )
 }
