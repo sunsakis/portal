@@ -398,37 +398,6 @@ export default function Map() {
         </div>
       )}
 
-      {/* Instructions overlay for mobile */}
-      {isMobileDevice() && !userPin && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1 }}
-          className="absolute top-4 left-4 right-4 bg-blue-500 text-white px-4 py-3 rounded-lg shadow-lg"
-          style={{ zIndex: 1500 }}
-        >
-          <div className="flex items-center gap-2">
-            <span>👆</span>
-            <span className="text-sm">Tap the "Place Pin" button below to share your location</span>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Desktop message */}
-      {!isMobileDevice() && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-4 left-4 right-4 bg-green-500 text-white px-4 py-3 rounded-lg shadow-lg max-w-md mx-auto"
-          style={{ zIndex: 1500 }}
-        >
-          <div className="flex items-center gap-2">
-            <span>🖥️</span>
-            <span className="text-sm">Click the "Place Pin" button below to share your location</span>
-          </div>
-        </motion.div>
-      )}
-
       <MapContainer
         center={centerPosition}
         zoom={13}
@@ -500,16 +469,19 @@ export default function Map() {
       <motion.button
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
-        className={`absolute bottom-8 left-1/2 transform -translate-x-1/2 ${
+        className={`fixed bottom-20 left-1/2 transform -translate-x-1/2 ${
           userPin 
             ? 'bg-red-500 hover:bg-red-600' 
-            : 'bg-blue-500 hover:bg-blue-600'
-        } text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 font-medium`}
-        style={{ zIndex: 1600 }}
+            : 'bg-green-500 hover:bg-green-600'
+        } opacity-80 text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-2 font-medium`}
+        style={{ 
+          zIndex: 1600,
+          marginBottom: 'env(safe-area-inset-bottom, 0px)'
+        }}
         onClick={userPin ? 
           () => {
             setUserPin(null)
-            addToast('Location pin removed', 'info')
+            addToast('Chat portal closed', 'info')
           } :
           handlePlacePin
         }
@@ -522,13 +494,13 @@ export default function Map() {
           </>
         ) : userPin ? (
           <>
-            <span className="text-lg">📍</span>
-            <span className="text-sm">Remove Pin</span>
+            <span className="text-xl">🧌</span>
+            <span className="text-sm">Close Portal</span>
           </>
         ) : (
           <>
-            <span className="text-lg">📍</span>
-            <span className="text-sm">Place Pin</span>
+            <span className="text-xl">🧌</span>
+            <span className="text-sm">Open Portal</span>
           </>
         )}
       </motion.button>
