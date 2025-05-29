@@ -7,24 +7,57 @@ import './App.css'
 
 function App() {
   const [updateAvailable, setUpdateAvailable] = useState(false)
+  const [swRegistration, setSwRegistration] = useState(null)
 
   useEffect(() => {
+    // Register service worker
     const updateSW = registerSW({
       onNeedRefresh() {
+        console.log('PWA update available')
         setUpdateAvailable(true)
       },
       onOfflineReady() {
-        console.log('App ready to work offline')
+        console.log('PWA ready to work offline')
       },
+      onRegistered(r) {
+        console.log('SW Registered: ' + r)
+        setSwRegistration(r)
+      },
+      onRegisterError(error) {
+        console.log('SW registration error', error)
+      }
     })
 
-    // Auto-update after 60 seconds if update is available
-    if (updateAvailable) {
+    // Force update if available
+    if (updateAvailable && updateSW) {
+      // Auto-update after 60 seconds if update is available
       setTimeout(() => {
         updateSW(true)
       }, 60000)
     }
+
+    // Debug: Check if we're in a PWA context
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      console.log('Running as PWA')
+    } else {
+      console.log('Running in browser')
+    }
+
+    // Debug: Check if beforeinstallprompt is supported
+    window.addEventListener('beforeinstallprompt', (e) => {
+      console.log('beforeinstallprompt event fired')
+    })
+
   }, [updateAvailable])
+
+  const handleUpdate = () => {
+    if (swRegistration && swRegistration.waiting) {
+      swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' })
+      window.location.reload()
+    } else {
+      window.location.reload()
+    }
+  }
 
   return (
     <div className="App">
@@ -40,7 +73,7 @@ function App() {
           <div className="flex items-center justify-between">
             <span className="text-sm">New version available!</span>
             <button
-              onClick={() => window.location.reload()}
+              onClick={handleUpdate}
               className="text-xs bg-white text-blue-500 px-2 py-1 rounded ml-3"
             >
               Update

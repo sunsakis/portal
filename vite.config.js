@@ -8,8 +8,36 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', '*.png'],
+      manifest: {
+        name: 'Pinhopper - Location Chat',
+        short_name: 'Pinhopper',
+        description: 'Share your location to open a chat portal and connect with people nearby',
+        theme_color: '#000000',
+        background_color: '#ffffff',
+        display: 'standalone',
+        scope: '/',
+        start_url: '/',
+        orientation: 'portrait-primary',
+        icons: [
+          {
+            src: '/android/android-launchericon-192-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any maskable'
+          },
+          {
+            src: '/android/android-launchericon-512-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable'
+          }
+        ]
+      },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
+        // Add navigation fallback for SPA
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/_/, /\/[^/?]+\.[^/]+$/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/api\.maptiler\.com\/.*/i,
@@ -56,7 +84,12 @@ export default defineConfig({
   },
   server: {
     host: true,
-    port: 3000
+    port: 3000,
+    https: false // Set to true if you need HTTPS in development
+  },
+  preview: {
+    host: true,
+    port: 4173
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'leaflet', 'react-leaflet']
