@@ -469,9 +469,9 @@ export default function Map() {
       <motion.button
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
-        className={`fixed bottom-14 left-1/3 transform -translate-x-1/2 ${
+        className={`fixed bottom-16 left-1/3 transform -translate-x-1/2 ${
           userPin 
-            ? 'bg-red-500 hover:bg-red-600 opacity-33' 
+            ? 'bg-red-500 hover:bg-red-600 opacity-30' 
             : 'bg-green-500 hover:bg-green-600 opacity-80'
         } text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-2 font-medium`}
         style={{ 
