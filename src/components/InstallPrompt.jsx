@@ -102,12 +102,12 @@ export default function InstallPrompt() {
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
-            className="fixed bottom-4 left-1/2 bg-white rounded-lg shadow-xl border p-4 mx-4"
+            className="fixed bottom-4 left-4 right-4 bg-white rounded-lg shadow-xl border p-4"
             style={{ 
               zIndex: 10001,
               maxWidth: '400px',
-              width: 'calc(100vw - 32px)',
-              transform: 'translateX(-50%)'
+              marginLeft: 'auto',
+              marginRight: 'auto'
             }}
           >
             <div className="flex items-start gap-3">
