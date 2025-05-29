@@ -12,9 +12,8 @@ import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility
 
 const socket = io(import.meta.env.VITE_SERVER_URL || 'http://localhost:3001')
 
-const MapControls = ({ onLocationRequest }) => {
+const MapControls = () => {
   const map = useMap()
-  const [isLocating, setIsLocating] = useState(false)
   
   useEffect(() => {
     map.doubleClickZoom.disable()
@@ -22,46 +21,8 @@ const MapControls = ({ onLocationRequest }) => {
     map.addControl(zoomControl)
     return () => map.removeControl(zoomControl)
   }, [map])
-
-  const handleLocateUser = useCallback(() => {
-    setIsLocating(true)
-    navigator.geolocation?.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords
-        map.setView([latitude, longitude], 16)
-        onLocationRequest(latitude, longitude)
-        setIsLocating(false)
-      },
-      (error) => {
-        console.log('Location access denied or unavailable')
-        setIsLocating(false)
-        alert('Location access is needed to find your position. Please enable location in your browser settings.')
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    )
-  }, [map, onLocationRequest])
   
-  return (
-    <motion.button
-      onClick={handleLocateUser}
-      disabled={isLocating}
-      className="fixed bottom-24 right-4 z-10 bg-white hover:bg-gray-50 text-gray-700 p-3 rounded-full shadow-lg border border-gray-200"
-      whileTap={{ scale: 0.95 }}
-      whileHover={{ scale: 1.05 }}
-    >
-      {isLocating ? (
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-          className="text-lg"
-        >
-          ⟳
-        </motion.div>
-      ) : (
-        <div className="text-lg">📍</div>
-      )}
-    </motion.button>
-  )
+  return null
 }
 
 // Proper MapTiler integration using Leaflet plugin
@@ -173,11 +134,8 @@ const BottomSheet = ({ isOpen, onClose, children }) => {
 
 export default function Map() {
   const user_id = 'user_id'
-  const [userLocation, setUserLocation] = useState(null)
-  const [isSharing, setIsSharing] = useState(false)
   const [showBottomSheet, setShowBottomSheet] = useState(false)
   const [selectedMarker, setSelectedMarker] = useState(null)
-  const [locationRequested, setLocationRequested] = useState(false)
   
   // Default to Vilnius coordinates
   const defaultLocation = { latitude: 54.697325, longitude: 25.315356 }
@@ -191,29 +149,6 @@ export default function Map() {
     }
   })
 
-  // Try to get user location once on mount
-  useEffect(() => {
-    if (locationRequested) return
-    
-    navigator.geolocation?.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords
-        setUserLocation({ latitude, longitude })
-        setMarkers(prev => ({
-          ...prev,
-          [user_id]: { ...prev[user_id], latitude, longitude }
-        }))
-      },
-      (error) => {
-        console.log('Location not available, using default location')
-        setUserLocation(defaultLocation)
-      },
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
-    )
-    
-    setLocationRequested(true)
-  }, [user_id, locationRequested])
-
   useEffect(() => {
     socket.on("receive_location", (data) => {
       const { latitude, longitude, live_period, user_id, quest, name } = data
@@ -226,47 +161,13 @@ export default function Map() {
     return () => socket.off("receive_location")
   }, [])
 
-  const handleLocationShare = useCallback(() => {
-    setIsSharing(true)
-    
-    navigator.geolocation?.getCurrentPosition((position) => {
-      const { latitude, longitude } = position.coords
-      const locationData = {
-        latitude, longitude,
-        live_period: Date.now(),
-        user_id,
-        quest: 'Available for chat',
-        name: 'You'
-      }
-      
-      socket.emit('send_location', locationData)
-      setMarkers(prev => ({ ...prev, [user_id]: locationData }))
-      setIsSharing(false)
-      navigator.vibrate?.(100)
-    }, (error) => {
-      console.log('Location sharing failed')
-      setIsSharing(false)
-      alert('Please enable location access to share your position')
-    })
-  }, [user_id])
-
   const handleMarkerClick = useCallback((marker, userId) => {
     setSelectedMarker({ ...marker, userId })
     setShowBottomSheet(true)
   }, [])
 
-  const handleLocationRequest = useCallback((latitude, longitude) => {
-    setUserLocation({ latitude, longitude })
-    setMarkers(prev => ({
-      ...prev,
-      [user_id]: { ...prev[user_id], latitude, longitude }
-    }))
-  }, [user_id])
-
-  // Use user location if available, otherwise use default
-  const centerPosition = userLocation 
-    ? [userLocation.latitude, userLocation.longitude]
-    : [defaultLocation.latitude, defaultLocation.longitude]
+  // Use default location as center
+  const centerPosition = [defaultLocation.latitude, defaultLocation.longitude]
 
   return (
     <div className="relative h-screen w-full overflow-hidden">
@@ -278,28 +179,7 @@ export default function Map() {
         attributionControl={true}
       >
         <MapLayers maptilerApiKey={import.meta.env.VITE_MAPTILER_API} />
-        <MapControls onLocationRequest={handleLocationRequest} />
-        
-        {/* Share Location Button */}
-        <motion.button
-          onClick={handleLocationShare}
-          disabled={isSharing}
-          className="fixed bottom-4 right-4 z-10 bg-blue-500 hover:bg-blue-600 text-white p-4 rounded-full shadow-lg"
-          whileTap={{ scale: 0.95 }}
-          whileHover={{ scale: 1.05 }}
-        >
-          {isSharing ? (
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-              className="text-lg"
-            >
-              📡
-            </motion.div>
-          ) : (
-            <div className="text-lg">📡</div>
-          )}
-        </motion.button>
+        <MapControls />
         
         {Object.entries(markers).map(([userId, marker]) => {
           const { latitude, longitude, live_period, quest, name } = marker
