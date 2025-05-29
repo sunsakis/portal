@@ -4,8 +4,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "Map Your Quest",
-  description: "Become the main character by teaming up with others, completing quests and leveling up in real life.",
+  title: "Pinhopper",
+  description: "Share your location to open a chat portal.",
 };
 
 export default function RootLayout({ children }) {

@@ -1,7 +1,7 @@
 {
-  "name": "Map Your Quest",
-  "short_name": "QuestMap",
-  "description": "Share your location and quests with others in real-time",
+  "name": "Pinhopper",
+  "short_name": "Pinhopper",
+  "description": "Share your location and chat with others in real-time.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

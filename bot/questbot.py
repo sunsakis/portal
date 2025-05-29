@@ -91,8 +91,8 @@ async def handle_error(update: Update, context: CallbackContext):
        
 
 if __name__ == '__main__':
-    logging.info('Starting Questworld log...')
-    print('Starting Questworld...')
+    logging.info('Starting log...')
+    print('Starting...')
     
     dp = Application.builder().token(TOKEN).build()
     dp.add_handler(CommandHandler("start", start))
