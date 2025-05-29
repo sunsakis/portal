@@ -321,12 +321,7 @@ export default function Map() {
     setShowBottomSheet(true)
   }, [])
 
-  const handleDoubleTap = useCallback(async (e) => {
-    if (!isMobileDevice()) {
-      addToast('This action is only available on mobile devices', 'warning')
-      return
-    }
-
+  const handlePlacePin = useCallback(async (e) => {
     setIsPlacingPin(true)
     addToast('Getting your location...', 'info')
 
@@ -364,6 +359,18 @@ export default function Map() {
     }
   }, [getCurrentLocation, addToast, error, user_id])
 
+  const handleDoubleTap = useCallback(async (e) => {
+    if (!isMobileDevice()) {
+      addToast('This action is only available on mobile devices', 'warning')
+      return
+    }
+
+    // Only allow double tap if no pin is placed yet
+    if (!userPin) {
+      handlePlacePin(e)
+    }
+  }, [userPin, handlePlacePin, addToast])
+
   // Use default location as center
   const centerPosition = [defaultLocation.latitude, defaultLocation.longitude]
 
@@ -389,6 +396,37 @@ export default function Map() {
             <span>Getting your location...</span>
           </div>
         </div>
+      )}
+
+      {/* Instructions overlay for mobile */}
+      {isMobileDevice() && !userPin && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1 }}
+          className="absolute top-4 left-4 right-4 bg-blue-500 text-white px-4 py-3 rounded-lg shadow-lg"
+          style={{ zIndex: 1500 }}
+        >
+          <div className="flex items-center gap-2">
+            <span>👆</span>
+            <span className="text-sm">Tap the "Place Pin" button below to share your location</span>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Desktop message */}
+      {!isMobileDevice() && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-4 left-4 right-4 bg-green-500 text-white px-4 py-3 rounded-lg shadow-lg max-w-md mx-auto"
+          style={{ zIndex: 1500 }}
+        >
+          <div className="flex items-center gap-2">
+            <span>🖥️</span>
+            <span className="text-sm">Click the "Place Pin" button below to share your location</span>
+          </div>
+        </motion.div>
       )}
 
       <MapContainer
@@ -458,7 +496,6 @@ export default function Map() {
         )}
       </BottomSheet>
 
-
       {/* Pin placement/removal button - centered at bottom */}
       <motion.button
         initial={{ scale: 0 }}
@@ -466,13 +503,13 @@ export default function Map() {
         className={`absolute bottom-8 left-1/2 transform -translate-x-1/2 ${
           userPin 
             ? 'bg-red-500 hover:bg-red-600' 
-            : 'bg-green-500 hover:bg-green-600'
+            : 'bg-blue-500 hover:bg-blue-600'
         } text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 font-medium`}
         style={{ zIndex: 1600 }}
         onClick={userPin ? 
           () => {
             setUserPin(null)
-            addToast('Portal removed', 'info')
+            addToast('Location pin removed', 'info')
           } :
           handlePlacePin
         }
@@ -485,13 +522,13 @@ export default function Map() {
           </>
         ) : userPin ? (
           <>
-            <span className="text-lg">🧌</span>
-            <span className="text-sm">Close Portal</span>
+            <span className="text-lg">📍</span>
+            <span className="text-sm">Remove Pin</span>
           </>
         ) : (
           <>
-            <span className="text-lg">🧌</span>
-            <span className="text-sm">Open Portal</span>
+            <span className="text-lg">📍</span>
+            <span className="text-sm">Place Pin</span>
           </>
         )}
       </motion.button>
