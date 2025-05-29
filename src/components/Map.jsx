@@ -85,7 +85,7 @@ const Toast = ({ message, type = 'info', onClose }) => {
   const bgColor = {
     success: 'bg-green-500',
     error: 'bg-red-500',
-    info: 'bg-blue-500',
+    info: 'bg-green-500',
     warning: 'bg-orange-500'
   }[type]
 
@@ -392,7 +392,7 @@ export default function Map() {
       {isPlacingPin && (
         <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 2100, backgroundColor: 'rgba(0,0,0,0.3)' }}>
           <div className="bg-white rounded-lg p-6 flex items-center gap-3 shadow-xl">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
             <span>Getting your location...</span>
           </div>
         </div>
@@ -469,9 +469,9 @@ export default function Map() {
       <motion.button
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
-        className={`fixed bottom-20 left-1/2 transform -translate-x-1/2 ${
+        className={`fixed bottom-20 left-1/3 transform -translate-x-1/2 ${
           userPin 
-            ? 'bg-red-500 hover:bg-red-600' 
+            ? 'bg-red-500 hover:bg-red-600 opacity-33' 
             : 'bg-green-500 hover:bg-green-600'
         } opacity-80 text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-2 font-medium`}
         style={{ 
