@@ -472,8 +472,8 @@ export default function Map() {
         className={`fixed bottom-14 left-1/3 transform -translate-x-1/2 ${
           userPin 
             ? 'bg-red-500 hover:bg-red-600 opacity-33' 
-            : 'bg-green-500 hover:bg-green-600'
-        } opacity-80 text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-2 font-medium`}
+            : 'bg-green-500 hover:bg-green-600 opacity-80'
+        } text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-2 font-medium`}
         style={{ 
           zIndex: 1600,
           marginBottom: 'env(safe-area-inset-bottom, 0px)'
