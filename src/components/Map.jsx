@@ -391,37 +391,6 @@ export default function Map() {
         </div>
       )}
 
-      {/* Instructions overlay for mobile */}
-      {isMobileDevice() && !userPin && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1 }}
-          className="absolute top-4 left-4 right-4 bg-blue-500 text-white px-4 py-3 rounded-lg shadow-lg"
-          style={{ zIndex: 1500 }}
-        >
-          <div className="flex items-center gap-2">
-            <span>👆</span>
-            <span className="text-sm">Double tap anywhere on the map to place your location pin</span>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Desktop message */}
-      {!isMobileDevice() && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-4 left-4 right-4 bg-orange-500 text-white px-4 py-3 rounded-lg shadow-lg max-w-md mx-auto"
-          style={{ zIndex: 1500 }}
-        >
-          <div className="flex items-center gap-2">
-            <span>📱</span>
-            <span className="text-sm">Pin placement is only available on mobile devices</span>
-          </div>
-        </motion.div>
-      )}
-
       <MapContainer
         center={centerPosition}
         zoom={13}
@@ -489,21 +458,43 @@ export default function Map() {
         )}
       </BottomSheet>
 
-      {/* Pin removal button when user has placed a pin */}
-      {userPin && (
-        <motion.button
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          className="absolute bottom-20 right-4 bg-red-500 text-white p-3 rounded-full shadow-lg"
-          style={{ zIndex: 1600 }}
-          onClick={() => {
+
+      {/* Pin placement/removal button - centered at bottom */}
+      <motion.button
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        className={`absolute bottom-8 left-1/2 transform -translate-x-1/2 ${
+          userPin 
+            ? 'bg-red-500 hover:bg-red-600' 
+            : 'bg-green-500 hover:bg-green-600'
+        } text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 font-medium`}
+        style={{ zIndex: 1600 }}
+        onClick={userPin ? 
+          () => {
             setUserPin(null)
-            addToast('Location pin removed', 'info')
-          }}
-        >
-          <span className="text-lg">📍❌</span>
-        </motion.button>
-      )}
+            addToast('Portal removed', 'info')
+          } :
+          handlePlacePin
+        }
+        disabled={isPlacingPin}
+      >
+        {isPlacingPin ? (
+          <>
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            <span className="text-sm">Getting location...</span>
+          </>
+        ) : userPin ? (
+          <>
+            <span className="text-lg">🧌</span>
+            <span className="text-sm">Close Portal</span>
+          </>
+        ) : (
+          <>
+            <span className="text-lg">🧌</span>
+            <span className="text-sm">Open Portal</span>
+          </>
+        )}
+      </motion.button>
     </div>
   )
 }
