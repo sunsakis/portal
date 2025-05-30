@@ -58,7 +58,7 @@ export default function Map() {
 
       if (error) {
         console.error('Error creating portal:', error)
-        addToast('Failed to create portal', 'error')
+        addToast('Failed to create portal', error)
       } else {
         addToast(`Portal opened! (±${Math.round(userLocation.accuracy)}m)`, 'success')
         
