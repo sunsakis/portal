@@ -108,6 +108,277 @@ const Toast = ({ message, type = 'info', onClose }) => {
   )
 }
 
+// Chat Portal Component
+const ChatPortal = ({ isOpen, onClose, portalData, currentUserId }) => {
+  const [message, setMessage] = useState('')
+  const [messages, setMessages] = useState([])
+  const [typing, setTyping] = useState(false)
+  const messagesEndRef = useRef(null)
+  const inputRef = useRef(null)
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      // Small delay to ensure the sheet is fully open
+      setTimeout(() => {
+        inputRef.current.focus()
+      }, 300)
+    }
+  }, [isOpen])
+
+  // Socket events for chat
+  useEffect(() => {
+    if (!isOpen || !portalData) return
+
+    const portalId = `portal_${portalData.userId || 'unknown'}`
+    
+    socket.emit('join_portal', { portalId, userId: currentUserId })
+
+    socket.on('receive_message', (data) => {
+      if (data.portalId === portalId) {
+        setMessages(prev => [...prev, data])
+      }
+    })
+
+    socket.on('user_typing', (data) => {
+      if (data.portalId === portalId && data.userId !== currentUserId) {
+        setTyping(data.isTyping)
+      }
+    })
+
+    socket.on('portal_joined', (data) => {
+      if (data.portalId === portalId) {
+        setMessages(prev => [...prev, {
+          id: Date.now(),
+          type: 'system',
+          message: `${data.userName} joined the portal`,
+          timestamp: new Date().toISOString()
+        }])
+      }
+    })
+
+    return () => {
+      socket.off('receive_message')
+      socket.off('user_typing')
+      socket.off('portal_joined')
+      socket.emit('leave_portal', { portalId, userId: currentUserId })
+    }
+  }, [isOpen, portalData, currentUserId])
+
+  const sendMessage = () => {
+    if (!message.trim() || !portalData) return
+
+    const portalId = `portal_${portalData.userId || 'unknown'}`
+    const messageData = {
+      id: Date.now(),
+      portalId,
+      userId: currentUserId,
+      userName: 'You',
+      message: message.trim(),
+      timestamp: new Date().toISOString(),
+      type: 'user'
+    }
+
+    socket.emit('send_message', messageData)
+    setMessages(prev => [...prev, messageData])
+    setMessage('')
+  }
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      sendMessage()
+    }
+  }
+
+  const handleTyping = () => {
+    if (!portalData) return
+    
+    const portalId = `portal_${portalData.userId || 'unknown'}`
+    socket.emit('typing', { 
+      portalId, 
+      userId: currentUserId, 
+      isTyping: message.length > 0 
+    })
+  }
+
+  useEffect(() => {
+    handleTyping()
+  }, [message])
+
+  const bind = useDrag(
+    ({ last, velocity: [, vy], direction: [, dy], movement: [, my] }) => {
+      if (last && (my > 100 || (vy > 0.5 && dy > 0))) {
+        onClose()
+      }
+    },
+    { from: () => [0, 0], filterTaps: true, bounds: { top: 0 }, rubberband: true }
+  )
+
+  const formatTime = (timestamp) => {
+    return new Date(timestamp).toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    })
+  }
+
+  const getDistanceText = (accuracy) => {
+    if (accuracy < 10) return "Very close"
+    if (accuracy < 50) return "Nearby"
+    if (accuracy < 100) return "Close"
+    return "In the area"
+  }
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.5 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black"
+            style={{ zIndex: 1800 }}
+            onClick={onClose}
+          />
+          <motion.div
+            {...bind()}
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+            className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl touch-none flex flex-col"
+            style={{ height: '80vh', zIndex: 1900 }}
+          >
+            {/* Header */}
+            <div className="flex-shrink-0 p-4 border-b border-gray-200">
+              <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    🧌 Portal Chat
+                  </h3>
+                  {portalData && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                      <span>{portalData.name || 'Anonymous'}</span>
+                      <span>•</span>
+                      <span>{getDistanceText(portalData.accuracy || 100)}</span>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={onClose}
+                  className="p-2 hover:bg-gray-100 rounded-full"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {messages.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="text-4xl mb-2">👋</div>
+                  <p className="text-gray-500">
+                    Start a conversation with people at this location!
+                  </p>
+                </div>
+              ) : (
+                messages.map((msg) => (
+                  <div key={msg.id} className={`flex ${msg.type === 'system' ? 'justify-center' : msg.userId === currentUserId ? 'justify-end' : 'justify-start'}`}>
+                    {msg.type === 'system' ? (
+                      <div className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                        {msg.message}
+                      </div>
+                    ) : (
+                      <div className={`max-w-xs lg:max-w-md px-3 py-2 rounded-2xl ${
+                        msg.userId === currentUserId
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-200 text-gray-900'
+                      }`}>
+                        {msg.userId !== currentUserId && (
+                          <div className="text-xs opacity-70 mb-1">
+                            {msg.userName}
+                          </div>
+                        )}
+                        <div className="text-sm">{msg.message}</div>
+                        <div className={`text-xs mt-1 ${
+                          msg.userId === currentUserId ? 'text-blue-100' : 'text-gray-500'
+                        }`}>
+                          {formatTime(msg.timestamp)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+              
+              {typing && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-200 text-gray-900 px-3 py-2 rounded-2xl">
+                    <div className="flex items-center space-x-1">
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input Area */}
+            <div className="flex-shrink-0 p-4 border-t border-gray-200">
+              <div className="flex items-end gap-2">
+                <div className="flex-1 relative">
+                  <textarea
+                    ref={inputRef}
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Type a message..."
+                    className="w-full px-4 py-3 border border-gray-300 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    rows="1"
+                    style={{ 
+                      minHeight: '44px', 
+                      maxHeight: '100px',
+                      paddingBottom: 'env(safe-area-inset-bottom, 12px)'
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={sendMessage}
+                  disabled={!message.trim()}
+                  className={`p-3 rounded-full font-medium transition-colors ${
+                    message.trim()
+                      ? 'bg-blue-500 text-white hover:bg-blue-600'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                  style={{ minWidth: '44px', height: '44px' }}
+                >
+                  <span className="text-lg">➤</span>
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  )
+}
+
 // Map event handler for double taps
 const MapEventHandler = ({ onDoubleTap }) => {
   const map = useMap()
@@ -215,48 +486,6 @@ const MapLayers = ({ maptilerApiKey }) => {
   )
 }
 
-const BottomSheet = ({ isOpen, onClose, children }) => {
-  const bind = useDrag(
-    ({ last, velocity: [, vy], direction: [, dy], movement: [, my] }) => {
-      if (last && (my > 100 || (vy > 0.5 && dy > 0))) {
-        onClose()
-      }
-    },
-    { from: () => [0, 0], filterTaps: true, bounds: { top: 0 }, rubberband: true }
-  )
-
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 0.5 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black"
-            style={{ zIndex: 1800 }}
-            onClick={onClose}
-          />
-          <motion.div
-            {...bind()}
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl touch-none"
-            style={{ maxHeight: '70vh', zIndex: 1900 }}
-          >
-            <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-4" />
-            <div className="px-4 pb-8 overflow-y-auto max-h-full">
-              {children}
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
-  )
-}
-
 // Custom marker icon for user's location
 const createUserLocationIcon = () => {
   return L.divIcon({
@@ -272,10 +501,25 @@ const createUserLocationIcon = () => {
   })
 }
 
+// Portal marker icon
+const createPortalIcon = () => {
+  return L.divIcon({
+    html: `
+      <div class="portal-wrapper">
+        <div class="portal-pulse"></div>
+        <div class="portal-icon">🧌</div>
+      </div>
+    `,
+    className: 'portal-marker',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15]
+  })
+}
+
 export default function Map() {
-  const user_id = 'user_id'
-  const [showBottomSheet, setShowBottomSheet] = useState(false)
-  const [selectedMarker, setSelectedMarker] = useState(null)
+  const user_id = 'user_' + Math.random().toString(36).substr(2, 9)
+  const [showChatPortal, setShowChatPortal] = useState(false)
+  const [selectedPortal, setSelectedPortal] = useState(null)
   const [toasts, setToasts] = useState([])
   const [userPin, setUserPin] = useState(null)
   const [isPlacingPin, setIsPlacingPin] = useState(false)
@@ -290,7 +534,7 @@ export default function Map() {
       ...defaultLocation,
       live_period: null,
       quest: '',
-      name: ''
+      name: 'You'
     }
   })
 
@@ -317,9 +561,14 @@ export default function Map() {
   }, [])
 
   const handleMarkerClick = useCallback((marker, userId) => {
-    setSelectedMarker({ ...marker, userId })
-    setShowBottomSheet(true)
-  }, [])
+    const portalData = {
+      ...marker,
+      userId,
+      name: userId === user_id ? 'Your Portal' : marker.name || 'Anonymous'
+    }
+    setSelectedPortal(portalData)
+    setShowChatPortal(true)
+  }, [user_id])
 
   const handlePlacePin = useCallback(async (e) => {
     setIsPlacingPin(true)
@@ -346,10 +595,22 @@ export default function Map() {
         longitude: userLocation.longitude,
         live_period: Date.now() + 300000, // 5 minutes from now
         quest: 'Available for chat',
-        name: 'You'
+        name: 'Anonymous'
       })
 
-      addToast(`Pin placed! Accuracy: ${Math.round(userLocation.accuracy)}m`, 'success')
+      // Update local markers
+      setMarkers(prev => ({
+        ...prev,
+        [user_id]: {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+          live_period: Date.now() + 300000,
+          quest: 'Available for chat',
+          name: 'You'
+        }
+      }))
+
+      addToast(`Portal opened! Others can now join your chat`, 'success')
       
     } catch (err) {
       console.error('Location error:', err)
@@ -410,60 +671,40 @@ export default function Map() {
         <MapControls />
         <MapEventHandler onDoubleTap={handleDoubleTap} />
         
-        {/* User's location pin */}
-        {userPin && (
+        {/* User's location pin - now clickable for chat */}
+        {userPin && markers[user_id]?.live_period && (
           <Marker 
             position={[userPin.latitude, userPin.longitude]}
-            icon={createUserLocationIcon()}
-          >
-            <Popup>
-              <div className="p-2">
-                <strong className="block text-sm text-green-600">Your Location</strong>
-                <span className="text-xs text-gray-600">
-                  Accuracy: {Math.round(userPin.accuracy)}m
-                </span>
-                <br />
-                <span className="text-xs text-gray-500">
-                  {new Date(userPin.timestamp).toLocaleTimeString()}
-                </span>
-              </div>
-            </Popup>
-          </Marker>
+            icon={createPortalIcon()}
+            eventHandlers={{
+              click: () => handleMarkerClick(markers[user_id], user_id)
+            }}
+          />
         )}
         
-        {/* Other markers */}
+        {/* Other user markers */}
         {Object.entries(markers).map(([userId, marker]) => {
           const { latitude, longitude, live_period, quest, name } = marker
           return live_period && userId !== user_id && (
             <Marker 
               key={userId} 
               position={[latitude, longitude]}
+              icon={createPortalIcon()}
               eventHandlers={{
                 click: () => handleMarkerClick(marker, userId)
               }}
-            >
-              <Popup>
-                <div className="p-2">
-                  <strong className="block text-sm">{name}</strong>
-                  <span className="text-xs text-gray-600">{quest}</span>
-                </div>
-              </Popup>
-            </Marker>
+            />
           )
         })}
       </MapContainer>
 
-      <BottomSheet isOpen={showBottomSheet} onClose={() => setShowBottomSheet(false)}>
-        {selectedMarker && (
-          <div className="p-4">
-            <h3 className="text-lg font-semibold mb-2">{selectedMarker.name}</h3>
-            <p className="text-gray-600 mb-4">{selectedMarker.quest}</p>
-            <button className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600">
-              Start Chat
-            </button>
-          </div>
-        )}
-      </BottomSheet>
+      {/* Chat Portal */}
+      <ChatPortal 
+        isOpen={showChatPortal} 
+        onClose={() => setShowChatPortal(false)}
+        portalData={selectedPortal}
+        currentUserId={user_id}
+      />
 
       {/* Pin placement/removal button - centered at bottom */}
       <motion.button
@@ -481,6 +722,18 @@ export default function Map() {
         onClick={userPin ? 
           () => {
             setUserPin(null)
+            setMarkers(prev => ({
+              ...prev,
+              [user_id]: { ...prev[user_id], live_period: null }
+            }))
+            socket.emit('send_location', {
+              user_id,
+              latitude: 0,
+              longitude: 0,
+              live_period: null,
+              quest: '',
+              name: ''
+            })
             addToast('Chat portal closed', 'info')
           } :
           handlePlacePin
@@ -504,6 +757,61 @@ export default function Map() {
           </>
         )}
       </motion.button>
+
+      <style jsx>{`
+        .portal-marker {
+          background: transparent !important;
+          border: none !important;
+          z-index: 1000 !important;
+        }
+
+        .portal-wrapper {
+          position: relative;
+          width: 30px;
+          height: 30px;
+        }
+
+        .portal-icon {
+          width: 30px;
+          height: 30px;
+          background: white;
+          border: 2px solid #3b82f6;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 16px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+          position: absolute;
+          top: 0;
+          left: 0;
+          z-index: 1002;
+          cursor: pointer;
+        }
+
+        .portal-pulse {
+          position: absolute;
+          top: -10px;
+          left: -10px;
+          width: 50px;
+          height: 50px;
+          background: rgba(59, 130, 246, 0.2);
+          border-radius: 50%;
+          animation: portalPulse 2s infinite;
+          z-index: 1001;
+        }
+
+        @keyframes portalPulse {
+          0% {
+            transform: scale(0.8);
+            opacity: 1;
+          }
+          100% {
+            transform: scale(1.5);
+            opacity: 0;
+          }
+        }
+      `}</style>
     </div>
   )
 }
