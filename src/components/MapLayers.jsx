@@ -1,4 +1,3 @@
-// src/components/MapLayers.jsx - Simplified version
 import React, { useState, useEffect } from 'react'
 import { TileLayer, useMap } from 'react-leaflet'
 import { MaptilerLayer } from '@maptiler/leaflet-maptilersdk'

@@ -45,6 +45,48 @@ body {
   margin: 2px !important;
 }
 
+/* Portal marker styles */
+.portal-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.portal-wrapper {
+  position: relative;
+  width: 30px;
+  height: 30px;
+}
+
+.portal-icon {
+  width: 30px;
+  height: 30px;
+  background: white;
+  border: 2px solid #3b82f6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  cursor: pointer;
+}
+
+.portal-pulse {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  width: 50px;
+  height: 50px;
+  background: rgba(59, 130, 246, 0.2);
+  border-radius: 50%;
+  animation: portalPulse 2s infinite;
+  z-index: 1;
+}
+
 /* User location marker styles */
 .user-location-marker {
   background: transparent !important;
@@ -54,13 +96,13 @@ body {
 
 .user-location-wrapper {
   position: relative;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
 }
 
 .user-location-dot {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   background: #29f205;
   border: 3px solid white;
   border-radius: 50%;
@@ -75,12 +117,23 @@ body {
   position: absolute;
   top: -15px;
   left: -15px;
-  width: 50px;
-  height: 50px;
+  width: 54px;
+  height: 54px;
   background: rgba(148, 248, 54, 0.2);
   border-radius: 50%;
   animation: userLocationPulse 2s infinite;
   z-index: 1001;
+}
+
+@keyframes portalPulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
 }
 
 @keyframes userLocationPulse {
