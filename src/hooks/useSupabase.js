@@ -1,20 +1,38 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-// Initialize Supabase
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-)
+// Initialize Supabase with fallback check
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Missing Supabase environment variables:', {
+    url: supabaseUrl ? 'SET' : 'MISSING',
+    key: supabaseKey ? 'SET' : 'MISSING'
+  })
+}
+
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null
 
 // Supabase Auth Hook with fallback
 export const useSupabaseAuth = () => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
+    if (!supabase) {
+      setError('Supabase not configured')
+      setLoading(false)
+      return
+    }
+
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('Session error:', error)
+        setError(error.message)
+      }
       setUser(session?.user ?? null)
       setLoading(false)
     })
@@ -22,8 +40,10 @@ export const useSupabaseAuth = () => {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log('Auth event:', event)
         setUser(session?.user ?? null)
         setLoading(false)
+        setError(null)
       }
     )
 
@@ -31,38 +51,38 @@ export const useSupabaseAuth = () => {
   }, [])
 
   const signInAnonymously = async () => {
+    if (!supabase) {
+      setError('Supabase not configured')
+      return null
+    }
+
     try {
-      // Try anonymous sign-in first
+      setLoading(true)
       const { data, error } = await supabase.auth.signInAnonymously()
-      if (error) throw error
-      return data
-    } catch (error) {
-      console.log('Anonymous auth disabled, using temporary email auth...')
       
-      // Fallback: Create a temporary email account
-      const tempEmail = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 5)}@temp.local`
-      const tempPassword = Math.random().toString(36).substr(2, 12)
-      
-      try {
-        const { data, error } = await supabase.auth.signUp({
-          email: tempEmail,
-          password: tempPassword,
-        })
-        
-        if (error) throw error
-        return data
-      } catch (signUpError) {
-        console.error('Both auth methods failed:', signUpError)
+      if (error) {
+        console.error('Anonymous sign-in failed:', error)
+        setError(error.message)
         return null
       }
+      
+      console.log('Anonymous sign-in successful')
+      return data
+    } catch (err) {
+      console.error('Auth error:', err)
+      setError(err.message)
+      return null
+    } finally {
+      setLoading(false)
     }
   }
 
   const signOut = async () => {
+    if (!supabase) return
     await supabase.auth.signOut()
   }
 
-  return { user, loading, signInAnonymously, signOut }
+  return { user, loading, error, signInAnonymously, signOut }
 }
 
 // Geolocation hook (unchanged)
@@ -130,7 +150,7 @@ export const useGeolocation = () => {
   return { location, error, loading, getCurrentLocation }
 }
 
-// Portal management hook
+// Portal management hook with improved error handling
 export const usePortals = (user) => {
   const [portals, setPortals] = useState([])
   const [userPortal, setUserPortal] = useState(null)
@@ -138,27 +158,31 @@ export const usePortals = (user) => {
 
   // Load portals and set up real-time subscription
   useEffect(() => {
-    if (!user) return
+    if (!user || !supabase) return
 
     const loadPortals = async () => {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('portals')
-        .select(`
-          *,
-          profiles:user_id (username, avatar_url)
-        `)
-        .eq('is_active', true)
-        .gte('expires_at', new Date().toISOString())
-        .order('created_at', { ascending: false })
+      try {
+        const { data, error } = await supabase
+          .from('portals')
+          .select(`
+            *,
+            profiles:user_id (username, avatar_url)
+          `)
+          .eq('is_active', true)
+          .gte('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
 
-      if (error) {
-        console.error('Error loading portals:', error)
-      } else {
-        setPortals(data || [])
-        // Find user's portal
-        const myPortal = data?.find(p => p.user_id === user.id)
-        setUserPortal(myPortal || null)
+        if (error) {
+          console.error('Error loading portals:', error)
+        } else {
+          setPortals(data || [])
+          // Find user's portal
+          const myPortal = data?.find(p => p.user_id === user.id)
+          setUserPortal(myPortal || null)
+        }
+      } catch (err) {
+        console.error('Portal loading failed:', err)
       }
       setLoading(false)
     }
@@ -183,42 +207,56 @@ export const usePortals = (user) => {
   }, [user])
 
   const createPortal = async (location) => {
-    if (!user) return { error: 'Not authenticated' }
-
-    const { data, error } = await supabase
-      .from('portals')
-      .insert({
-        user_id: user.id,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        accuracy: location.accuracy,
-        title: 'Chat Portal',
-        description: 'Available for chat',
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
-      })
-      .select()
-      .single()
-
-    if (!error) {
-      setUserPortal(data)
+    if (!user || !supabase) {
+      return { error: 'Not authenticated or Supabase not configured' }
     }
 
-    return { data, error }
+    try {
+      const { data, error } = await supabase
+        .from('portals')
+        .insert({
+          user_id: user.id,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          accuracy: location.accuracy,
+          title: 'Chat Portal',
+          description: 'Available for chat',
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
+        })
+        .select()
+        .single()
+
+      if (!error && data) {
+        setUserPortal(data)
+      }
+
+      return { data, error }
+    } catch (err) {
+      console.error('Portal creation failed:', err)
+      return { error: err.message }
+    }
   }
 
   const closePortal = async () => {
-    if (!userPortal || !user) return { error: 'No portal to close' }
-
-    const { error } = await supabase
-      .from('portals')
-      .update({ is_active: false })
-      .eq('id', userPortal.id)
-
-    if (!error) {
-      setUserPortal(null)
+    if (!userPortal || !user || !supabase) {
+      return { error: 'No portal to close' }
     }
 
-    return { error }
+    try {
+      const { error } = await supabase
+        .from('portals')
+        .update({ is_active: false })
+        .eq('id', userPortal.id)
+
+      if (!error) {
+        setUserPortal(null)
+      }
+
+      return { error }
+    } catch (err) {
+      console.error('Portal close failed:', err)
+      return { error: err.message }
+    }
   }
 
   return {
