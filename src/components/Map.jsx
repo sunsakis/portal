@@ -14,23 +14,32 @@ import 'leaflet-defaulticon-compatibility'
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css'
 
 export default function Map() {
-  const { user, loading: authLoading, signInAnonymously } = useSupabaseAuth()
-  const { error, getCurrentLocation } = useGeolocation()
+  const { user, loading: authLoading, signInAnonymously, error: authError } = useSupabaseAuth()
+  const { error: geoError, getCurrentLocation } = useGeolocation()
   const { portals, userPortal, createPortal, closePortal } = usePortals(user)
   
   const [selectedPortal, setSelectedPortal] = useState(null)
   const [showChatPortal, setShowChatPortal] = useState(false)
   const [toasts, setToasts] = useState([])
   const [isPlacingPin, setIsPlacingPin] = useState(false)
+  const [debugInfo, setDebugInfo] = useState([])
+  const [showDebug, setShowDebug] = useState(false)
 
   // Default location (Vilnius)
   const defaultLocation = { latitude: 54.697325, longitude: 25.315356 }
+
+  // Debug logging function
+  const addDebugLog = useCallback((message, type = 'info') => {
+    const timestamp = new Date().toLocaleTimeString()
+    setDebugInfo(prev => [...prev.slice(-10), { timestamp, message, type }]) // Keep last 10 logs
+  }, [])
 
   // Toast utilities
   const addToast = useCallback((message, type = 'info') => {
     const id = Date.now() + Math.random()
     setToasts(prev => [...prev, { id, message, type }])
-  }, [])
+    addDebugLog(`TOAST: ${message}`, type)
+  }, [addDebugLog])
 
   const removeToast = useCallback((id) => {
     setToasts(prev => prev.filter(toast => toast.id !== id))
@@ -39,27 +48,50 @@ export default function Map() {
   // Auto sign-in anonymously
   useEffect(() => {
     if (!authLoading && !user) {
+      addDebugLog('Attempting anonymous sign-in...', 'info')
       signInAnonymously()
     }
-  }, [authLoading, user, signInAnonymously])
+  }, [authLoading, user, signInAnonymously, addDebugLog])
+
+  // Debug environment variables and auth state
+  useEffect(() => {
+    const envCheck = {
+      supabaseUrl: import.meta.env.VITE_SUPABASE_URL ? 'SET' : 'MISSING',
+      supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'SET' : 'MISSING',
+      maptilerKey: import.meta.env.VITE_MAPTILER_API ? 'SET' : 'MISSING',
+      user: user ? `YES (${user.id.slice(0, 8)}...)` : 'NO',
+      authError: authError || 'NONE'
+    }
+    addDebugLog(`Environment: ${JSON.stringify(envCheck)}`, 'info')
+  }, [user, authError, addDebugLog])
 
   const handleCreatePortal = async () => {
+    addDebugLog('=== CREATE PORTAL START ===', 'info')
+    
     if (!user || isPlacingPin) {
+      addDebugLog(`Cannot create: user=${!!user}, isPlacing=${isPlacingPin}`, 'warning')
       addToast('Please wait, signing you in...', 'info')
       return
     }
 
+    addDebugLog(`Creating portal for user: ${user.id}`, 'info')
     setIsPlacingPin(true)
     addToast('Getting your location...', 'info')
 
     try {
+      addDebugLog('Getting location...', 'info')
       const userLocation = await getCurrentLocation()
+      addDebugLog(`Location: ${userLocation.latitude}, ${userLocation.longitude} (±${userLocation.accuracy}m)`, 'success')
+      
+      addDebugLog('Calling createPortal...', 'info')
       const { data, error } = await createPortal(userLocation)
 
       if (error) {
-        console.error('Error creating portal:', error)
-        addToast('Failed to create portal', 'error')
+        const errorMsg = typeof error === 'string' ? error : (error.message || JSON.stringify(error))
+        addDebugLog(`Portal creation error: ${errorMsg}`, 'error')
+        addToast(`Failed to create portal: ${errorMsg}`, 'error')
       } else {
+        addDebugLog(`Portal created successfully: ${data?.id}`, 'success')
         addToast(`Portal opened! (±${Math.round(userLocation.accuracy)}m)`, 'success')
         
         // Auto-close after 5 minutes for demo
@@ -69,18 +101,23 @@ export default function Map() {
         }, 300000)
       }
     } catch (err) {
-      console.error('Location error:', err)
-      addToast(error || 'Could not get location', 'error')
+      const errorMsg = err.message || err.toString()
+      addDebugLog(`Exception: ${errorMsg}`, 'error')
+      addToast(geoError || errorMsg || 'Could not get location', 'error')
     } finally {
       setIsPlacingPin(false)
+      addDebugLog('=== CREATE PORTAL END ===', 'info')
     }
   }
 
   const handleClosePortal = async () => {
+    addDebugLog('Closing portal...', 'info')
     const { error } = await closePortal()
     if (error) {
+      addDebugLog(`Portal close error: ${error}`, 'error')
       addToast('Failed to close portal', 'error')
     } else {
+      addDebugLog('Portal closed successfully', 'success')
       addToast('Portal closed', 'info')
     }
   }
@@ -118,6 +155,89 @@ export default function Map() {
             onClose={() => removeToast(toast.id)}
           />
         ))}
+      </AnimatePresence>
+
+      {/* Debug Toggle Button - Always visible */}
+      <button
+        onClick={() => setShowDebug(!showDebug)}
+        className="fixed top-4 right-4 bg-black/80 text-white p-2 rounded-full text-xs z-[2001] w-12 h-12 flex items-center justify-center"
+      >
+        🐛
+      </button>
+
+      {/* Debug Panel */}
+      <AnimatePresence>
+        {showDebug && (
+          <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            className="fixed top-0 right-0 w-80 h-full bg-black/95 text-white p-4 z-[2000] overflow-y-auto"
+          >
+            <h3 className="text-lg font-bold mb-4">Debug Info</h3>
+            
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold mb-2">Environment:</h4>
+              <div className="text-xs space-y-1">
+                <div>Supabase URL: {import.meta.env.VITE_SUPABASE_URL ? '✅ SET' : '❌ MISSING'}</div>
+                <div>Supabase Key: {import.meta.env.VITE_SUPABASE_ANON_KEY ? '✅ SET' : '❌ MISSING'}</div>
+                <div>User: {user ? `✅ ${user.id.slice(0, 8)}...` : '❌ NO USER'}</div>
+                <div>Auth Error: {authError || 'None'}</div>
+                <div>Geo Error: {geoError || 'None'}</div>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold mb-2">Actions:</h4>
+              <div className="space-y-2">
+                <button
+                  onClick={() => {
+                    addDebugLog('Manual auth attempt', 'info')
+                    signInAnonymously()
+                  }}
+                  className="block w-full text-xs bg-blue-600 p-2 rounded"
+                >
+                  Try Auth
+                </button>
+                <button
+                  onClick={() => {
+                    addDebugLog('Manual location attempt', 'info')
+                    getCurrentLocation().then(loc => {
+                      addDebugLog(`Manual location: ${loc.latitude}, ${loc.longitude}`, 'success')
+                    }).catch(err => {
+                      addDebugLog(`Manual location error: ${err.message}`, 'error')
+                    })
+                  }}
+                  className="block w-full text-xs bg-green-600 p-2 rounded"
+                >
+                  Test Location
+                </button>
+                <button
+                  onClick={() => setDebugInfo([])}
+                  className="block w-full text-xs bg-red-600 p-2 rounded"
+                >
+                  Clear Logs
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Logs:</h4>
+              <div className="text-xs space-y-1 max-h-96 overflow-y-auto">
+                {debugInfo.map((log, i) => (
+                  <div key={i} className={`p-1 rounded ${
+                    log.type === 'error' ? 'bg-red-900/50' :
+                    log.type === 'success' ? 'bg-green-900/50' :
+                    log.type === 'warning' ? 'bg-yellow-900/50' :
+                    'bg-gray-800/50'
+                  }`}>
+                    <span className="text-gray-400">{log.timestamp}</span> {log.message}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Loading overlay */}
@@ -200,8 +320,6 @@ export default function Map() {
           </>
         )}
       </motion.button>
-
-
     </div>
   )
 }
