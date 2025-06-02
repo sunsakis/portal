@@ -8,7 +8,7 @@ import { registerSW } from 'virtual:pwa-register'
 import './App.css'
 
 function App() {
-  const { user, loading, error, signInWithEmail, isAuthenticated } = useSupabaseAuth()
+  const { user, loading, error, authenticateWithCode, isAuthenticated } = useSupabaseAuth()
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const [swRegistration, setSwRegistration] = useState(null)
 
@@ -48,9 +48,8 @@ function App() {
     }
   }
 
-  const handleAuth = async (email) => {
-    const success = await signInWithEmail(email)
-    return success
+  const handleAuth = async (email, action, code) => {
+    return await authenticateWithCode(email, action, code)
   }
 
   // Show loading screen

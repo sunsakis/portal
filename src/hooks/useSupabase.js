@@ -11,7 +11,7 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null
 
-// Simple email authentication hook
+// Magic code authentication hook
 export const useSupabaseAuth = () => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -73,8 +73,8 @@ export const useSupabaseAuth = () => {
     }
   }
 
-  // Magic link sign in
-  const signInWithEmail = async (email) => {
+  // Magic code authentication
+  const authenticateWithCode = async (email, action, code = null) => {
     if (!supabase) {
       setError('Supabase not configured')
       return false
@@ -84,22 +84,46 @@ export const useSupabaseAuth = () => {
       setLoading(true)
       setError(null)
 
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: window.location.origin,
-        }
-      })
+      if (action === 'send') {
+        // Send OTP code
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
+          options: {
+            shouldCreateUser: true, // Create user if they don't exist
+          }
+        })
 
-      if (error) {
-        setError(error.message)
-        setLoading(false)
-        return false
+        if (error) {
+          setError(error.message)
+          setLoading(false)
+          return false
+        }
+
+        console.log('Verification code sent to:', email)
+        return true
+
+      } else if (action === 'verify' && code) {
+        // Verify OTP code
+        const { data, error } = await supabase.auth.verifyOtp({
+          email,
+          token: code,
+          type: 'email'
+        })
+
+        if (error) {
+          setError(error.message === 'Token has expired or is invalid' 
+            ? 'Invalid or expired code. Please try again.' 
+            : error.message)
+          setLoading(false)
+          return false
+        }
+
+        console.log('Code verified successfully')
+        return true
       }
 
-      return true
     } catch (err) {
-      console.error('Sign in error:', err)
+      console.error('Auth error:', err)
       setError(err.message)
       setLoading(false)
       return false
@@ -115,7 +139,7 @@ export const useSupabaseAuth = () => {
     user, 
     loading, 
     error, 
-    signInWithEmail, 
+    authenticateWithCode, 
     signOut,
     isAuthenticated: !!user 
   }
@@ -186,7 +210,7 @@ export const useGeolocation = () => {
   return { location, error, loading, getCurrentLocation }
 }
 
-// Portal management hook (simplified - no complex auth checks)
+// Portal management hook (unchanged)
 export const usePortals = (user) => {
   const [portals, setPortals] = useState([])
   const [userPortal, setUserPortal] = useState(null)
