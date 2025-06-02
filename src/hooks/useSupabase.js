@@ -1,20 +1,17 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-// Initialize Supabase with fallback check
+// Initialize Supabase
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing Supabase environment variables:', {
-    url: supabaseUrl ? 'SET' : 'MISSING',
-    key: supabaseKey ? 'SET' : 'MISSING'
-  })
+  console.error('Missing Supabase environment variables')
 }
 
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null
 
-// Supabase Auth Hook with fallback
+// Simple email authentication hook
 export const useSupabaseAuth = () => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -39,41 +36,73 @@ export const useSupabaseAuth = () => {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         console.log('Auth event:', event)
         setUser(session?.user ?? null)
         setLoading(false)
         setError(null)
+
+        // Create/update profile when user signs in
+        if (event === 'SIGNED_IN' && session?.user) {
+          await ensureUserProfile(session.user)
+        }
       }
     )
 
     return () => subscription.unsubscribe()
   }, [])
 
-  const signInAnonymously = async () => {
+  // Ensure user profile exists
+  const ensureUserProfile = async (user) => {
+    if (!user || !supabase) return
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user.id,
+          username: user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`,
+          updated_at: new Date().toISOString()
+        })
+
+      if (error && error.code !== '23505') { // Ignore duplicate key errors
+        console.error('Profile upsert error:', error)
+      }
+    } catch (err) {
+      console.error('Profile creation error:', err)
+    }
+  }
+
+  // Magic link sign in
+  const signInWithEmail = async (email) => {
     if (!supabase) {
       setError('Supabase not configured')
-      return null
+      return false
     }
 
     try {
       setLoading(true)
-      const { data, error } = await supabase.auth.signInAnonymously()
-      
+      setError(null)
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: window.location.origin,
+        }
+      })
+
       if (error) {
-        console.error('Anonymous sign-in failed:', error)
         setError(error.message)
-        return null
+        setLoading(false)
+        return false
       }
-      
-      console.log('Anonymous sign-in successful')
-      return data
+
+      return true
     } catch (err) {
-      console.error('Auth error:', err)
+      console.error('Sign in error:', err)
       setError(err.message)
-      return null
-    } finally {
       setLoading(false)
+      return false
     }
   }
 
@@ -82,7 +111,14 @@ export const useSupabaseAuth = () => {
     await supabase.auth.signOut()
   }
 
-  return { user, loading, error, signInAnonymously, signOut }
+  return { 
+    user, 
+    loading, 
+    error, 
+    signInWithEmail, 
+    signOut,
+    isAuthenticated: !!user 
+  }
 }
 
 // Geolocation hook (unchanged)
@@ -136,7 +172,7 @@ export const useGeolocation = () => {
           }
           setError(errorMessage)
           setLoading(false)
-          reject(error)
+          reject(new Error(errorMessage))
         },
         {
           enableHighAccuracy: true,
@@ -150,13 +186,12 @@ export const useGeolocation = () => {
   return { location, error, loading, getCurrentLocation }
 }
 
-// Portal management hook with improved error handling
+// Portal management hook (simplified - no complex auth checks)
 export const usePortals = (user) => {
   const [portals, setPortals] = useState([])
   const [userPortal, setUserPortal] = useState(null)
   const [loading, setLoading] = useState(false)
 
-  // Load portals and set up real-time subscription
   useEffect(() => {
     if (!user || !supabase) return
 
@@ -177,7 +212,6 @@ export const usePortals = (user) => {
           console.error('Error loading portals:', error)
         } else {
           setPortals(data || [])
-          // Find user's portal
           const myPortal = data?.find(p => p.user_id === user.id)
           setUserPortal(myPortal || null)
         }
@@ -195,9 +229,7 @@ export const usePortals = (user) => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'portals' },
-        () => {
-          loadPortals() // Reload all portals when any change occurs
-        }
+        () => loadPortals()
       )
       .subscribe()
 
@@ -208,7 +240,7 @@ export const usePortals = (user) => {
 
   const createPortal = async (location) => {
     if (!user || !supabase) {
-      return { error: 'Not authenticated or Supabase not configured' }
+      return { error: 'Not authenticated' }
     }
 
     try {
@@ -221,7 +253,7 @@ export const usePortals = (user) => {
           accuracy: location.accuracy,
           title: 'Chat Portal',
           description: 'Available for chat',
-          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         })
         .select()
         .single()

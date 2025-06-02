@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import Map from './components/Map'
+import AuthScreen from './components/AuthScreen'
 import InstallPrompt from './components/InstallPrompt'
 import NetworkStatus from './components/NetworkStatus'
+import { useSupabaseAuth } from './hooks/useSupabase'
 import { registerSW } from 'virtual:pwa-register'
 import './App.css'
 
 function App() {
+  const { user, loading, error, signInWithEmail, isAuthenticated } = useSupabaseAuth()
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const [swRegistration, setSwRegistration] = useState(null)
 
@@ -30,24 +33,10 @@ function App() {
 
     // Force update if available
     if (updateAvailable && updateSW) {
-      // Auto-update after 60 seconds if update is available
       setTimeout(() => {
         updateSW(true)
       }, 60000)
     }
-
-    // Debug: Check if we're in a PWA context
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      console.log('Running as PWA')
-    } else {
-      console.log('Running in browser')
-    }
-
-    // Debug: Check if beforeinstallprompt is supported
-    window.addEventListener('beforeinstallprompt', (e) => {
-      console.log('beforeinstallprompt event fired')
-    })
-
   }, [updateAvailable])
 
   const handleUpdate = () => {
@@ -59,11 +48,43 @@ function App() {
     }
   }
 
+  const handleAuth = async (email) => {
+    const success = await signInWithEmail(email)
+    return success
+  }
+
+  // Show loading screen
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading Pinhopper...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show auth screen if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <>
+        <NetworkStatus />
+        <AuthScreen 
+          onAuth={handleAuth}
+          loading={loading}
+          error={error}
+        />
+        <InstallPrompt />
+      </>
+    )
+  }
+
+  // Show main app if authenticated
   return (
     <div className="App">
       <NetworkStatus />
       
-      {/* Use enhanced Map with vector support */}
       <Map />
       
       <InstallPrompt />
