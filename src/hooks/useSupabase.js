@@ -97,10 +97,6 @@ export const useSupabaseAuth = () => {
         }
 
         console.log('Magic code sent to:', email)
-        // In development, show the code in console (remove in production)
-        if (data?.dev_code) {
-          console.log('DEV CODE:', data.dev_code)
-        }
         return true
 
       } else if (action === 'verify' && code) {
