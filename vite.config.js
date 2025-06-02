@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', '*.png'],
       manifest: {
-        name: 'Pinhopper - Location Chat',
-        short_name: 'Pinhopper',
+        name: 'Portal - Location Chat',
+        short_name: 'Portal',
         description: 'Share your location to open a chat portal and connect with people nearby',
         theme_color: '#000000',
         background_color: '#ffffff',

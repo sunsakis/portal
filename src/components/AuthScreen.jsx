@@ -253,7 +253,7 @@ const AuthScreen = ({ onAuth, loading, error }) => {
 
         <div className="text-center mb-8">
           <div className="text-6xl mb-4">🌀</div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Pinhopper</h1>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Portal</h1>
           <p className="text-gray-600">Share your location and chat with people nearby</p>
         </div>
 

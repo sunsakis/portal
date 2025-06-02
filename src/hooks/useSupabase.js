@@ -87,14 +87,24 @@ export const useSupabaseAuth = () => {
       setError(null)
 
       if (action === 'send') {
-        // Call Edge Function to send OTP
+        // Call Edge Function to send OTP with better error handling
+        console.log('Calling Edge Function send-otp...')
+        
         const { data, error } = await supabase.functions.invoke('send-otp', {
           body: { email }
         })
 
+        console.log('Edge Function response:', { data, error })
+
         if (error) {
-          console.error('Edge function error:', error)
-          setError('Failed to send verification code')
+          console.error('Edge function error details:', error)
+          setError(`Failed to send verification code: ${error.message || 'Unknown error'}`)
+          return false
+        }
+
+        if (data?.error) {
+          console.error('Edge function returned error:', data.error)
+          setError(`Failed to send verification code: ${data.error}`)
           return false
         }
 
@@ -103,55 +113,38 @@ export const useSupabaseAuth = () => {
 
       } else if (action === 'verify' && code) {
         // Verify the OTP code using our database function
+        console.log('Verifying code:', code)
+        
         const { data: isValid, error: verifyError } = await supabase.rpc('verify_magic_code', {
           user_email: email,
           input_code: code
         })
 
+        console.log('Verification result:', { isValid, verifyError })
+
         if (verifyError || !isValid) {
+          console.error('Code verification failed:', verifyError)
           setError('Invalid or expired code. Please try again.')
           setLoading(false)
           return false
         }
 
-        // Create/authenticate user with a temporary password
-        const tempPassword = Math.random().toString(36).substring(2, 15)
+        // Create user with anonymous auth and update email
+        console.log('Creating user...')
+        const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously()
         
-        // Try to sign up the user (creates new user)
-        let authResult = await supabase.auth.signUp({
-          email,
-          password: tempPassword,
-          options: {
-            emailRedirectTo: undefined // No email confirmation needed
-          }
-        })
+        if (anonError) {
+          console.error('Anonymous auth failed:', anonError)
+          setError('Authentication failed')
+          setLoading(false)
+          return false
+        }
 
-        // If user already exists, try to sign them in
-        if (authResult.error && authResult.error.message.includes('already registered')) {
-          authResult = await supabase.auth.signInWithPassword({
-            email,
-            password: tempPassword
-          })
-          
-          // If password doesn't work, reset it and try again
-          if (authResult.error) {
-            // Request password reset (this won't send email in our setup)
-            await supabase.auth.resetPasswordForEmail(email, {
-              redirectTo: undefined
-            })
-            
-            // As fallback, create anonymous user and update email
-            const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously()
-            
-            if (anonError) {
-              setError('Authentication failed')
-              setLoading(false)
-              return false
-            }
-
-            // Update the anonymous user with the email
-            await supabase.auth.updateUser({ email })
-          }
+        // Update the anonymous user with the email
+        const { error: updateError } = await supabase.auth.updateUser({ email })
+        
+        if (updateError) {
+          console.error('Email update failed:', updateError)
         }
 
         console.log('Code verified and user authenticated')

@@ -59,14 +59,14 @@ serve(async (req) => {
         'X-Postmark-Server-Token': Deno.env.get('POSTMARK_API_KEY') ?? ''
       },
       body: JSON.stringify({
-        From: 'noreply@yourdomain.com', // Replace with your verified sender
+        From: 'dev@portal.live',
         To: email,
-        Subject: 'Your Pinhopper verification code',
+        Subject: 'Your Portal verification code',
         TextBody: `Your verification code is: ${code}\n\nThis code expires in 5 minutes.\n\nIf you didn't request this code, please ignore this email.`,
         HtmlBody: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="text-align: center; margin-bottom: 30px;">
-              <h1 style="color: #2563eb; margin: 0;">🌀 Pinhopper</h1>
+              <h1 style="color: #2563eb; margin: 0;">🌀 Portal</h1>
             </div>
             <h2 style="color: #333; text-align: center;">Your verification code</h2>
             <div style="background: #f8fafc; border: 2px solid #e2e8f0; padding: 30px; border-radius: 12px; text-align: center; margin: 30px 0;">

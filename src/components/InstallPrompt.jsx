@@ -114,7 +114,7 @@ export default function InstallPrompt() {
               <div className="text-2xl flex-shrink-0">📱</div>
               <div className="flex-1">
                 <h3 className="font-semibold text-gray-900 mb-2">
-                  {isIOS ? 'Add to Home Screen' : 'Install Pinhopper'}
+                  {isIOS ? 'Add to Home Screen' : 'Install Portal'}
                 </h3>
                 {isIOS ? (
                   <div className="text-sm text-gray-600 space-y-2">
@@ -132,7 +132,7 @@ export default function InstallPrompt() {
                   </div>
                 ) : (
                   <p className="text-sm text-gray-600">
-                    Get quick access and better performance by adding Pinhopper to your home screen
+                    Get quick access and better performance by adding Portal to your home screen
                   </p>
                 )}
               </div>
