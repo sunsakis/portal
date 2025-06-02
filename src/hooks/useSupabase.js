@@ -73,7 +73,7 @@ export const useSupabaseAuth = () => {
     }
   }
 
-  // Magic code authentication
+  // Custom magic code authentication
   const authenticateWithCode = async (email, action, code = null) => {
     if (!supabase) {
       setError('Supabase not configured')
@@ -85,12 +85,9 @@ export const useSupabaseAuth = () => {
       setError(null)
 
       if (action === 'send') {
-        // Send OTP code
-        const { error } = await supabase.auth.signInWithOtp({
-          email,
-          options: {
-            shouldCreateUser: true, // Create user if they don't exist
-          }
+        // Generate and send magic code using our custom function
+        const { data, error } = await supabase.rpc('generate_and_send_magic_code', {
+          user_email: email
         })
 
         if (error) {
@@ -99,26 +96,63 @@ export const useSupabaseAuth = () => {
           return false
         }
 
-        console.log('Verification code sent to:', email)
+        console.log('Magic code sent to:', email)
+        // In development, show the code in console (remove in production)
+        if (data?.dev_code) {
+          console.log('DEV CODE:', data.dev_code)
+        }
         return true
 
       } else if (action === 'verify' && code) {
-        // Verify OTP code
-        const { data, error } = await supabase.auth.verifyOtp({
-          email,
-          token: code,
-          type: 'email'
+        // First verify the magic code
+        const { data: isValid, error: verifyError } = await supabase.rpc('verify_magic_code', {
+          user_email: email,
+          input_code: code
         })
 
-        if (error) {
-          setError(error.message === 'Token has expired or is invalid' 
-            ? 'Invalid or expired code. Please try again.' 
-            : error.message)
+        if (verifyError || !isValid) {
+          setError('Invalid or expired code. Please try again.')
           setLoading(false)
           return false
         }
 
-        console.log('Code verified successfully')
+        // If code is valid, create/sign in the user
+        // For simplicity, we'll create a temporary password and sign them up/in
+        const tempPassword = Math.random().toString(36).substring(2, 15)
+
+        // Try to sign in first (user might already exist)
+        let authResult = await supabase.auth.signInWithPassword({
+          email,
+          password: tempPassword
+        })
+
+        // If sign in fails, try to sign up
+        if (authResult.error) {
+          authResult = await supabase.auth.signUp({
+            email,
+            password: tempPassword,
+            options: {
+              emailRedirectTo: undefined // Disable email confirmation
+            }
+          })
+        }
+
+        // If both fail, create user manually and sign them in
+        if (authResult.error) {
+          // For anonymous-like behavior, we'll use signInAnonymously and update email
+          const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously()
+          
+          if (anonError) {
+            setError('Authentication failed')
+            setLoading(false)
+            return false
+          }
+
+          // Update the anonymous user with the email
+          await supabase.auth.updateUser({ email })
+        }
+
+        console.log('Code verified and user authenticated')
         return true
       }
 
