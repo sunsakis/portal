@@ -11,7 +11,7 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null
 
-// Magic code authentication hook
+// Clean OTP authentication hook using Edge Functions
 export const useSupabaseAuth = () => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -65,7 +65,7 @@ export const useSupabaseAuth = () => {
           updated_at: new Date().toISOString()
         })
 
-      if (error && error.code !== '23505') { // Ignore duplicate key errors
+      if (error && error.code !== '23505') {
         console.error('Profile upsert error:', error)
       }
     } catch (err) {
@@ -73,7 +73,7 @@ export const useSupabaseAuth = () => {
     }
   }
 
-  // Custom magic code authentication
+  // OTP authentication using Edge Functions
   const authenticateWithCode = async (email, action, code = null) => {
     if (!supabase) {
       setError('Supabase not configured')
@@ -81,26 +81,28 @@ export const useSupabaseAuth = () => {
     }
 
     try {
-      setLoading(true)
+      if (action === 'verify') {
+        setLoading(true)
+      }
       setError(null)
 
       if (action === 'send') {
-        // Generate and send magic code using our custom function
-        const { data, error } = await supabase.rpc('generate_and_send_magic_code', {
-          user_email: email
+        // Call Edge Function to send OTP
+        const { data, error } = await supabase.functions.invoke('send-otp', {
+          body: { email }
         })
 
         if (error) {
-          setError(error.message)
-          setLoading(false)
+          console.error('Edge function error:', error)
+          setError('Failed to send verification code')
           return false
         }
 
-        console.log('Magic code sent to:', email)
+        console.log('OTP sent successfully to:', email)
         return true
 
       } else if (action === 'verify' && code) {
-        // First verify the magic code
+        // Verify the OTP code using our database function
         const { data: isValid, error: verifyError } = await supabase.rpc('verify_magic_code', {
           user_email: email,
           input_code: code
@@ -112,50 +114,57 @@ export const useSupabaseAuth = () => {
           return false
         }
 
-        // If code is valid, create/sign in the user
-        // For simplicity, we'll create a temporary password and sign them up/in
+        // Create/authenticate user with a temporary password
         const tempPassword = Math.random().toString(36).substring(2, 15)
-
-        // Try to sign in first (user might already exist)
-        let authResult = await supabase.auth.signInWithPassword({
+        
+        // Try to sign up the user (creates new user)
+        let authResult = await supabase.auth.signUp({
           email,
-          password: tempPassword
+          password: tempPassword,
+          options: {
+            emailRedirectTo: undefined // No email confirmation needed
+          }
         })
 
-        // If sign in fails, try to sign up
-        if (authResult.error) {
-          authResult = await supabase.auth.signUp({
+        // If user already exists, try to sign them in
+        if (authResult.error && authResult.error.message.includes('already registered')) {
+          authResult = await supabase.auth.signInWithPassword({
             email,
-            password: tempPassword,
-            options: {
-              emailRedirectTo: undefined // Disable email confirmation
-            }
+            password: tempPassword
           })
-        }
-
-        // If both fail, create user manually and sign them in
-        if (authResult.error) {
-          // For anonymous-like behavior, we'll use signInAnonymously and update email
-          const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously()
           
-          if (anonError) {
-            setError('Authentication failed')
-            setLoading(false)
-            return false
-          }
+          // If password doesn't work, reset it and try again
+          if (authResult.error) {
+            // Request password reset (this won't send email in our setup)
+            await supabase.auth.resetPasswordForEmail(email, {
+              redirectTo: undefined
+            })
+            
+            // As fallback, create anonymous user and update email
+            const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously()
+            
+            if (anonError) {
+              setError('Authentication failed')
+              setLoading(false)
+              return false
+            }
 
-          // Update the anonymous user with the email
-          await supabase.auth.updateUser({ email })
+            // Update the anonymous user with the email
+            await supabase.auth.updateUser({ email })
+          }
         }
 
         console.log('Code verified and user authenticated')
+        setLoading(false)
         return true
       }
 
     } catch (err) {
       console.error('Auth error:', err)
       setError(err.message)
-      setLoading(false)
+      if (action === 'verify') {
+        setLoading(false)
+      }
       return false
     }
   }
@@ -202,7 +211,7 @@ export const useGeolocation = () => {
           clearTimeout(timeoutId)
           const newLocation = {
             latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
+            longitude: position.longitude,
             accuracy: position.coords.accuracy,
             timestamp: Date.now()
           }
@@ -277,7 +286,6 @@ export const usePortals = (user) => {
 
     loadPortals()
 
-    // Subscribe to portal changes
     const channel = supabase
       .channel('portals')
       .on(

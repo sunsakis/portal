@@ -7,7 +7,15 @@ const AuthScreen = ({ onAuth, loading, error }) => {
   const [code, setCode] = useState(['', '', '', '', '', ''])
   const [isLoading, setIsLoading] = useState(false)
   const [timeLeft, setTimeLeft] = useState(0)
+  const [debugLogs, setDebugLogs] = useState([])
   const codeRefs = useRef([])
+
+  // Debug logging
+  const addDebugLog = (message) => {
+    const timestamp = new Date().toLocaleTimeString()
+    setDebugLogs(prev => [...prev.slice(-5), `${timestamp}: ${message}`])
+    console.log(`AUTH DEBUG: ${message}`)
+  }
 
   // Countdown timer for resend
   useEffect(() => {
@@ -21,18 +29,27 @@ const AuthScreen = ({ onAuth, loading, error }) => {
     e.preventDefault()
     if (!email.trim()) return
 
+    addDebugLog(`Starting email submission for: ${email}`)
     setIsLoading(true)
     
     try {
+      addDebugLog('Calling onAuth with send action...')
       const success = await onAuth(email.trim().toLowerCase(), 'send')
+      addDebugLog(`onAuth result: ${success}`)
+      
       if (success) {
+        addDebugLog('Moving to code step')
         setStep('code')
         setTimeLeft(60) // 60 second cooldown
+      } else {
+        addDebugLog('onAuth returned false')
       }
     } catch (err) {
+      addDebugLog(`Error in handleEmailSubmit: ${err.message}`)
       console.error('Send code error:', err)
     } finally {
       setIsLoading(false)
+      addDebugLog('Email submission finished')
     }
   }
 
@@ -64,29 +81,47 @@ const AuthScreen = ({ onAuth, loading, error }) => {
     const finalCode = codeString || code.join('')
     if (finalCode.length !== 6) return
 
+    addDebugLog(`Submitting code: ${finalCode}`)
     setIsLoading(true)
     
     try {
-      await onAuth(email, 'verify', finalCode)
+      addDebugLog('Calling onAuth with verify action...')
+      const success = await onAuth(email, 'verify', finalCode)
+      addDebugLog(`Verify result: ${success}`)
+      
+      if (!success) {
+        addDebugLog('Code verification failed')
+        // Reset code on error
+        setCode(['', '', '', '', '', ''])
+        codeRefs.current[0]?.focus()
+      }
     } catch (err) {
+      addDebugLog(`Error in handleCodeSubmit: ${err.message}`)
+      console.error('Code verification error:', err)
       // Reset code on error
       setCode(['', '', '', '', '', ''])
       codeRefs.current[0]?.focus()
     } finally {
       setIsLoading(false)
+      addDebugLog('Code submission finished')
     }
   }
 
   const handleResend = async () => {
     if (timeLeft > 0) return
     
+    addDebugLog('Resending code...')
     setIsLoading(true)
     try {
-      await onAuth(email, 'send')
-      setTimeLeft(60)
-      setCode(['', '', '', '', '', ''])
-      codeRefs.current[0]?.focus()
+      const success = await onAuth(email, 'send')
+      addDebugLog(`Resend result: ${success}`)
+      if (success) {
+        setTimeLeft(60)
+        setCode(['', '', '', '', '', ''])
+        codeRefs.current[0]?.focus()
+      }
     } catch (err) {
+      addDebugLog(`Resend error: ${err.message}`)
       console.error('Resend error:', err)
     } finally {
       setIsLoading(false)
@@ -105,6 +140,14 @@ const AuthScreen = ({ onAuth, loading, error }) => {
           animate={{ scale: 1, opacity: 1 }}
           className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md"
         >
+          {/* Debug Panel */}
+          <div className="mb-4 p-3 bg-gray-100 rounded-lg text-xs">
+            <h4 className="font-bold mb-2">Debug Log:</h4>
+            {debugLogs.map((log, i) => (
+              <div key={i} className="text-gray-600">{log}</div>
+            ))}
+          </div>
+
           <div className="text-center mb-8">
             <div className="text-6xl mb-4">🔐</div>
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Enter your code</h2>
@@ -168,6 +211,7 @@ const AuthScreen = ({ onAuth, loading, error }) => {
                     setStep('email')
                     setCode(['', '', '', '', '', ''])
                     setEmail('')
+                    setDebugLogs([])
                   }}
                   className="text-gray-500 hover:text-gray-700 text-sm font-medium"
                 >
@@ -195,6 +239,18 @@ const AuthScreen = ({ onAuth, loading, error }) => {
         animate={{ scale: 1, opacity: 1 }}
         className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md"
       >
+        {/* Debug Panel */}
+        <div className="mb-4 p-3 bg-gray-100 rounded-lg text-xs">
+          <h4 className="font-bold mb-2">Debug Log:</h4>
+          {debugLogs.length === 0 ? (
+            <div className="text-gray-500">No logs yet...</div>
+          ) : (
+            debugLogs.map((log, i) => (
+              <div key={i} className="text-gray-600">{log}</div>
+            ))
+          )}
+        </div>
+
         <div className="text-center mb-8">
           <div className="text-6xl mb-4">🌀</div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">Pinhopper</h1>
