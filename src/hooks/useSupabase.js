@@ -73,7 +73,7 @@ export const useSupabaseAuth = () => {
     }
   }
 
-  // OTP authentication using Edge Functions
+  // Simple OTP authentication using Supabase's built-in system
   const authenticateWithCode = async (email, action, code = null) => {
     if (!supabase) {
       setError('Supabase not configured')
@@ -87,24 +87,20 @@ export const useSupabaseAuth = () => {
       setError(null)
 
       if (action === 'send') {
-        // Call Edge Function to send OTP with better error handling
-        console.log('Calling Edge Function send-otp...')
+        // Use Supabase's built-in OTP system
+        console.log('Sending OTP via Supabase to:', email)
         
-        const { data, error } = await supabase.functions.invoke('send-otp', {
-          body: { email }
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
+          options: {
+            shouldCreateUser: true, // Allow new user creation
+            emailRedirectTo: undefined // No redirect needed for PWA
+          }
         })
 
-        console.log('Edge Function response:', { data, error })
-
         if (error) {
-          console.error('Edge function error details:', error)
-          setError(`Failed to send verification code: ${error.message || 'Unknown error'}`)
-          return false
-        }
-
-        if (data?.error) {
-          console.error('Edge function returned error:', data.error)
-          setError(`Failed to send verification code: ${data.error}`)
+          console.error('OTP send failed:', error)
+          setError('Failed to send verification code')
           return false
         }
 
@@ -112,42 +108,23 @@ export const useSupabaseAuth = () => {
         return true
 
       } else if (action === 'verify' && code) {
-        // Verify the OTP code using our database function
-        console.log('Verifying code:', code)
+        // Verify the OTP code using Supabase's verification
+        console.log('Verifying OTP code:', code)
         
-        const { data: isValid, error: verifyError } = await supabase.rpc('verify_magic_code', {
-          user_email: email,
-          input_code: code
+        const { data, error } = await supabase.auth.verifyOtp({
+          email,
+          token: code,
+          type: 'email'
         })
 
-        console.log('Verification result:', { isValid, verifyError })
-
-        if (verifyError || !isValid) {
-          console.error('Code verification failed:', verifyError)
+        if (error) {
+          console.error('OTP verification failed:', error)
           setError('Invalid or expired code. Please try again.')
           setLoading(false)
           return false
         }
 
-        // Create user with anonymous auth and update email
-        console.log('Creating user...')
-        const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously()
-        
-        if (anonError) {
-          console.error('Anonymous auth failed:', anonError)
-          setError('Authentication failed')
-          setLoading(false)
-          return false
-        }
-
-        // Update the anonymous user with the email
-        const { error: updateError } = await supabase.auth.updateUser({ email })
-        
-        if (updateError) {
-          console.error('Email update failed:', updateError)
-        }
-
-        console.log('Code verified and user authenticated')
+        console.log('OTP verified successfully, user authenticated')
         setLoading(false)
         return true
       }
