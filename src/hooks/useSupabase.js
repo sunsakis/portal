@@ -84,7 +84,6 @@ export const useSupabaseAuth = () => {
           .insert({
             id: user.id,
             username: user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`,
-            email: user.email,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           })
@@ -415,7 +414,6 @@ export const usePortals = (user) => {
         const profileData = {
           id: user.id,
           username: user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`,
-          email: user.email || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }
