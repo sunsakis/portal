@@ -154,7 +154,7 @@ export const useSupabaseAuth = () => {
   }
 }
 
-// Geolocation hook (unchanged)
+// GPS-only location hook
 export const useGeolocation = () => {
   const [location, setLocation] = useState(null)
   const [error, setError] = useState(null)
@@ -162,8 +162,9 @@ export const useGeolocation = () => {
 
   const getCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
-      setError('Geolocation not supported')
-      return Promise.reject('Geolocation not supported')
+      const errorMsg = 'GPS not supported on this device'
+      setError(errorMsg)
+      return Promise.reject(new Error(errorMsg))
     }
 
     setLoading(true)
@@ -171,46 +172,80 @@ export const useGeolocation = () => {
 
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
-        setError('Location request timed out')
+        const errorMsg = 'GPS timeout - please try outdoors for better signal'
+        setError(errorMsg)
         setLoading(false)
-        reject(new Error('Timeout'))
-      }, 15000)
+        reject(new Error(errorMsg))
+      }, 20000) // Longer timeout for GPS
 
       navigator.geolocation.getCurrentPosition(
         (position) => {
           clearTimeout(timeoutId)
+          
+          // CRITICAL: Validate all coordinate data
+          const lat = position.coords.latitude
+          const lng = position.coords.longitude
+          const acc = position.coords.accuracy
+
+          // Strict validation - reject invalid GPS data
+          if (typeof lat !== 'number' || typeof lng !== 'number' || 
+              isNaN(lat) || isNaN(lng) || 
+              lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            const errorMsg = 'Invalid GPS coordinates - please try again'
+            setError(errorMsg)
+            setLoading(false)
+            reject(new Error(errorMsg))
+            return
+          }
+
+          // Reject extremely inaccurate readings (>1km)
+          if (acc && acc > 1000) {
+            const errorMsg = 'GPS signal too weak - please try outdoors'
+            setError(errorMsg)
+            setLoading(false)
+            reject(new Error(errorMsg))
+            return
+          }
+
           const newLocation = {
-            latitude: position.coords.latitude,
-            longitude: position.longitude,
-            accuracy: position.coords.accuracy,
+            latitude: lat,
+            longitude: lng,
+            accuracy: typeof acc === 'number' && !isNaN(acc) ? Math.round(acc) : 100,
             timestamp: Date.now()
           }
+          
+          console.log('Valid GPS location:', newLocation)
           setLocation(newLocation)
           setLoading(false)
           resolve(newLocation)
         },
         (error) => {
           clearTimeout(timeoutId)
-          let errorMessage = 'Unable to get location'
+          let errorMessage = 'GPS unavailable'
+          
           switch (error.code) {
             case error.PERMISSION_DENIED:
-              errorMessage = 'Location access denied. Please enable location permissions.'
+              errorMessage = 'Location permission denied. Please allow location access and reload the page.'
               break
             case error.POSITION_UNAVAILABLE:
-              errorMessage = 'Location unavailable. Check GPS settings.'
+              errorMessage = 'GPS unavailable. Please check location settings and try outdoors.'
               break
             case error.TIMEOUT:
-              errorMessage = 'Location request timed out. Try again.'
+              errorMessage = 'GPS timeout. Try moving outdoors for better signal.'
               break
+            default:
+              errorMessage = `GPS error: ${error.message || 'Please try again'}`
           }
+          
+          console.error('GPS error:', error)
           setError(errorMessage)
           setLoading(false)
           reject(new Error(errorMessage))
         },
         {
-          enableHighAccuracy: true,
-          timeout: 12000,
-          maximumAge: 60000
+          enableHighAccuracy: true,  // Force GPS, not network location
+          timeout: 15000,            // 15 second timeout
+          maximumAge: 60000          // Cache for 1 minute max
         }
       )
     })
@@ -219,7 +254,7 @@ export const useGeolocation = () => {
   return { location, error, loading, getCurrentLocation }
 }
 
-// Portal management hook (unchanged)
+// Production-ready portal management hook
 export const usePortals = (user) => {
   const [portals, setPortals] = useState([])
   const [userPortal, setUserPortal] = useState(null)
@@ -256,6 +291,7 @@ export const usePortals = (user) => {
 
     loadPortals()
 
+    // Real-time subscription
     const channel = supabase
       .channel('portals')
       .on(
@@ -275,14 +311,31 @@ export const usePortals = (user) => {
       return { error: 'Not authenticated' }
     }
 
+    // Validate location data before database insertion
+    if (!location || 
+        typeof location.latitude !== 'number' || 
+        typeof location.longitude !== 'number' ||
+        isNaN(location.latitude) || 
+        isNaN(location.longitude) ||
+        location.latitude < -90 || location.latitude > 90 ||
+        location.longitude < -180 || location.longitude > 180) {
+      return { error: 'Invalid location coordinates' }
+    }
+
     try {
+      console.log('Creating portal with validated coordinates:', {
+        lat: location.latitude,
+        lng: location.longitude,
+        acc: location.accuracy
+      })
+
       const { data, error } = await supabase
         .from('portals')
         .insert({
           user_id: user.id,
           latitude: location.latitude,
           longitude: location.longitude,
-          accuracy: location.accuracy,
+          accuracy: location.accuracy || 100,
           title: 'Chat Portal',
           description: 'Available for chat',
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
@@ -290,14 +343,20 @@ export const usePortals = (user) => {
         .select()
         .single()
 
-      if (!error && data) {
+      if (error) {
+        console.error('Portal creation database error:', error)
+        return { error: error.message || 'Failed to create portal' }
+      }
+
+      if (data) {
+        console.log('Portal created successfully in database:', data)
         setUserPortal(data)
       }
 
-      return { data, error }
+      return { data, error: null }
     } catch (err) {
-      console.error('Portal creation failed:', err)
-      return { error: err.message }
+      console.error('Portal creation exception:', err)
+      return { error: err.message || 'Portal creation failed' }
     }
   }
 
@@ -312,11 +371,13 @@ export const usePortals = (user) => {
         .update({ is_active: false })
         .eq('id', userPortal.id)
 
-      if (!error) {
-        setUserPortal(null)
+      if (error) {
+        console.error('Portal close error:', error)
+        return { error: error.message }
       }
 
-      return { error }
+      setUserPortal(null)
+      return { error: null }
     } catch (err) {
       console.error('Portal close failed:', err)
       return { error: err.message }
