@@ -319,7 +319,6 @@ export const usePortals = (user) => {
   const [portals, setPortals] = useState([])
   const [userPortal, setUserPortal] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [closeLoading, setCloseLoading] = useState(false)
 
   useEffect(() => {
     if (!user || !supabase) return
@@ -506,65 +505,26 @@ export const usePortals = (user) => {
   }
 
   const closePortal = async () => {
-    console.log('=== CLOSE PORTAL START ===')
-    console.log('UserPortal:', userPortal)
-    console.log('User:', user?.id)
-    console.log('Supabase available:', !!supabase)
-    console.log('Already closing:', closeLoading)
-
-    if (closeLoading) {
-      console.log('Close already in progress, ignoring')
-      return { error: 'Close in progress' }
-    }
-
     if (!userPortal || !user || !supabase) {
-      const error = 'No portal to close'
-      console.log('Close portal failed - missing requirements:', { userPortal: !!userPortal, user: !!user, supabase: !!supabase })
-      return { error }
+      return { error: 'No portal to close' }
     }
-
-    setCloseLoading(true)
 
     try {
-      console.log('Attempting to update portal:', userPortal.id, 'for user:', user.id)
-      
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Portal close timeout after 10 seconds')), 10000)
-      })
-
-      const updatePromise = supabase
+      // DELETE the portal instead of updating is_active
+      const { error } = await supabase
         .from('portals')
-        .update({ is_active: false })
+        .delete()
         .eq('id', userPortal.id)
-        .eq('user_id', user.id)
-        .select()
-
-      const { data, error } = await Promise.race([updatePromise, timeoutPromise])
-
-      console.log('Update result:', { data, error })
 
       if (error) {
-        console.error('Portal close database error:', error)
-        console.error('Error details:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        })
-        setCloseLoading(false)
+        console.error('Portal delete error:', error)
         return { error: error.message }
       }
 
-      console.log('Portal close successful, clearing userPortal state')
       setUserPortal(null)
-      setCloseLoading(false)
-      console.log('=== CLOSE PORTAL END ===')
       return { error: null }
     } catch (err) {
-      console.error('Portal close exception:', err)
-      setCloseLoading(false)
-      console.log('=== CLOSE PORTAL END (ERROR) ===')
+      console.error('Portal delete failed:', err)
       return { error: err.message }
     }
   }
@@ -573,7 +533,6 @@ export const usePortals = (user) => {
     portals,
     userPortal,
     loading,
-    closeLoading,
     createPortal,
     closePortal
   }
