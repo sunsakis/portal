@@ -505,25 +505,47 @@ export const usePortals = (user) => {
   }
 
   const closePortal = async () => {
+    console.log('=== CLOSE PORTAL START ===')
+    console.log('UserPortal:', userPortal)
+    console.log('User:', user?.id)
+    console.log('Supabase available:', !!supabase)
+
     if (!userPortal || !user || !supabase) {
-      return { error: 'No portal to close' }
+      const error = 'No portal to close'
+      console.log('Close portal failed - missing requirements:', { userPortal: !!userPortal, user: !!user, supabase: !!supabase })
+      return { error }
     }
 
     try {
-      const { error } = await supabase
+      console.log('Attempting to update portal:', userPortal.id, 'for user:', user.id)
+      
+      const { data, error } = await supabase
         .from('portals')
         .update({ is_active: false })
         .eq('id', userPortal.id)
+        .eq('user_id', user.id) // Extra safety check
+        .select()
+
+      console.log('Update result:', { data, error })
 
       if (error) {
-        console.error('Portal close error:', error)
+        console.error('Portal close database error:', error)
+        console.error('Error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        })
         return { error: error.message }
       }
 
+      console.log('Portal close successful, clearing userPortal state')
       setUserPortal(null)
+      console.log('=== CLOSE PORTAL END ===')
       return { error: null }
     } catch (err) {
-      console.error('Portal close failed:', err)
+      console.error('Portal close exception:', err)
+      console.log('=== CLOSE PORTAL END (ERROR) ===')
       return { error: err.message }
     }
   }
