@@ -388,57 +388,105 @@ export const usePortals = (user) => {
         lat: location.latitude,
         lng: location.longitude,
         acc: location.accuracy,
-        userId: user.id
+        userId: user.id,
+        userEmail: user.email
       })
 
-      // CRITICAL FIX: Ensure profile exists before creating portal
-      console.log('Ensuring profile exists before portal creation...')
+      // DETAILED PROFILE CHECK AND CREATION
+      console.log('=== PROFILE CHECK START ===')
       
       const { data: profileCheck, error: profileError } = await supabase
         .from('profiles')
-        .select('id')
+        .select('*')
         .eq('id', user.id)
         .single()
+
+      console.log('Profile check result:', { 
+        data: profileCheck, 
+        error: profileError,
+        errorCode: profileError?.code,
+        errorMessage: profileError?.message 
+      })
 
       if (profileError && profileError.code === 'PGRST116') {
         // Profile doesn't exist, create it
         console.log('Profile missing, creating it now...')
         
-        const { error: createProfileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            username: user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`,
-            email: user.email,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-
-        if (createProfileError) {
-          console.error('Failed to create profile:', createProfileError)
-          return { error: 'Failed to create user profile. Please try again.' }
+        const profileData = {
+          id: user.id,
+          username: user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`,
+          email: user.email || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         }
         
-        console.log('Profile created successfully')
+        console.log('Attempting to insert profile with data:', profileData)
+        
+        const { data: newProfile, error: createProfileError } = await supabase
+          .from('profiles')
+          .insert(profileData)
+          .select()
+          .single()
+
+        console.log('Profile creation result:', { 
+          data: newProfile, 
+          error: createProfileError,
+          errorCode: createProfileError?.code,
+          errorMessage: createProfileError?.message,
+          errorDetails: createProfileError?.details
+        })
+
+        if (createProfileError) {
+          console.error('DETAILED PROFILE ERROR:', {
+            code: createProfileError.code,
+            message: createProfileError.message,
+            details: createProfileError.details,
+            hint: createProfileError.hint
+          })
+          return { error: `Profile creation failed: ${createProfileError.message || 'Unknown error'}` }
+        }
+        
+        console.log('Profile created successfully:', newProfile)
       } else if (profileError) {
-        console.error('Profile check failed:', profileError)
-        return { error: 'Failed to verify user profile' }
+        console.error('Profile check failed with unexpected error:', profileError)
+        return { error: `Profile verification failed: ${profileError.message}` }
+      } else {
+        console.log('Profile already exists:', profileCheck)
       }
 
+      console.log('=== PROFILE CHECK END ===')
+
+      // Small delay to ensure profile is properly committed
+      await new Promise(resolve => setTimeout(resolve, 100))
+
       // Now create the portal
+      console.log('=== PORTAL CREATION START ===')
+      
+      const portalData = {
+        user_id: user.id,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        accuracy: location.accuracy || 100,
+        title: 'Chat Portal',
+        description: 'Available for chat',
+        is_active: true,
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+      }
+      
+      console.log('Creating portal with data:', portalData)
+
       const { data, error } = await supabase
         .from('portals')
-        .insert({
-          user_id: user.id,
-          latitude: location.latitude,
-          longitude: location.longitude,
-          accuracy: location.accuracy || 100,
-          title: 'Chat Portal',
-          description: 'Available for chat',
-          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-        })
+        .insert(portalData)
         .select()
         .single()
+
+      console.log('Portal creation result:', { 
+        data, 
+        error,
+        errorCode: error?.code,
+        errorMessage: error?.message 
+      })
 
       if (error) {
         console.error('Portal creation database error:', error)
@@ -450,6 +498,7 @@ export const usePortals = (user) => {
         setUserPortal(data)
       }
 
+      console.log('=== PORTAL CREATION END ===')
       return { data, error: null }
     } catch (err) {
       console.error('Portal creation exception:', err)
