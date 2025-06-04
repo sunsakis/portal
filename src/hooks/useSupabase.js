@@ -465,7 +465,7 @@ export const usePortals = (user) => {
 
       console.log('=== PROFILE CHECK END ===')
 
-      // Small delay to ensure profile is properly committed
+      // Small delay to ensure profile is properly commited
       await new Promise(resolve => setTimeout(resolve, 100))
 
       // Now create the portal
