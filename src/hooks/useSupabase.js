@@ -11,6 +11,11 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null
 
+// Simple username generation - just use the email
+const generateUsername = (email, userId) => {
+  return email || `user_${userId.slice(0, 8)}`
+}
+
 // Clean OTP authentication hook using Edge Functions
 export const useSupabaseAuth = () => {
   const [user, setUser] = useState(null)
@@ -57,7 +62,7 @@ export const useSupabaseAuth = () => {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Ensure user profile exists - FIXED VERSION
+  // Ensure user profile exists - FIXED VERSION with unique username
   const ensureUserProfile = async (user) => {
     if (!user || !supabase) return
 
@@ -79,11 +84,14 @@ export const useSupabaseAuth = () => {
       if (!existingProfile) {
         console.log('Creating new profile for user:', user.id)
         
+        // Generate username (just use email)
+        const username = generateUsername(user.email, user.id)
+        
         const { error: insertError } = await supabase
           .from('profiles')
           .insert({
             id: user.id,
-            username: user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`,
+            username: username,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           })
@@ -91,7 +99,7 @@ export const useSupabaseAuth = () => {
         if (insertError) {
           console.error('Profile creation failed:', insertError)
         } else {
-          console.log('Profile created successfully')
+          console.log('Profile created successfully with username:', username)
         }
       } else {
         console.log('Profile already exists')
@@ -391,7 +399,7 @@ export const usePortals = (user) => {
         userEmail: user.email
       })
 
-      // DETAILED PROFILE CHECK AND CREATION
+      // IMPROVED PROFILE CHECK AND CREATION
       console.log('=== PROFILE CHECK START ===')
       
       const { data: profileCheck, error: profileError } = await supabase
@@ -408,12 +416,15 @@ export const usePortals = (user) => {
       })
 
       if (profileError && profileError.code === 'PGRST116') {
-        // Profile doesn't exist, create it
+        // Profile doesn't exist, create it with unique username
         console.log('Profile missing, creating it now...')
+        
+        // Generate username (just use email)
+        const username = generateUsername(user.email, user.id)
         
         const profileData = {
           id: user.id,
-          username: user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`,
+          username: username,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }
@@ -444,7 +455,7 @@ export const usePortals = (user) => {
           return { error: `Profile creation failed: ${createProfileError.message || 'Unknown error'}` }
         }
         
-        console.log('Profile created successfully:', newProfile)
+        console.log('Profile created successfully with email as username:', newProfile)
       } else if (profileError) {
         console.error('Profile check failed with unexpected error:', profileError)
         return { error: `Profile verification failed: ${profileError.message}` }
