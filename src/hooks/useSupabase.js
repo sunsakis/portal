@@ -319,6 +319,7 @@ export const usePortals = (user) => {
   const [portals, setPortals] = useState([])
   const [userPortal, setUserPortal] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [closeLoading, setCloseLoading] = useState(false)
 
   useEffect(() => {
     if (!user || !supabase) return
@@ -509,6 +510,12 @@ export const usePortals = (user) => {
     console.log('UserPortal:', userPortal)
     console.log('User:', user?.id)
     console.log('Supabase available:', !!supabase)
+    console.log('Already closing:', closeLoading)
+
+    if (closeLoading) {
+      console.log('Close already in progress, ignoring')
+      return { error: 'Close in progress' }
+    }
 
     if (!userPortal || !user || !supabase) {
       const error = 'No portal to close'
@@ -516,15 +523,24 @@ export const usePortals = (user) => {
       return { error }
     }
 
+    setCloseLoading(true)
+
     try {
       console.log('Attempting to update portal:', userPortal.id, 'for user:', user.id)
       
-      const { data, error } = await supabase
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Portal close timeout after 10 seconds')), 10000)
+      })
+
+      const updatePromise = supabase
         .from('portals')
         .update({ is_active: false })
         .eq('id', userPortal.id)
-        .eq('user_id', user.id) // Extra safety check
+        .eq('user_id', user.id)
         .select()
+
+      const { data, error } = await Promise.race([updatePromise, timeoutPromise])
 
       console.log('Update result:', { data, error })
 
@@ -536,15 +552,18 @@ export const usePortals = (user) => {
           details: error.details,
           hint: error.hint
         })
+        setCloseLoading(false)
         return { error: error.message }
       }
 
       console.log('Portal close successful, clearing userPortal state')
       setUserPortal(null)
+      setCloseLoading(false)
       console.log('=== CLOSE PORTAL END ===')
       return { error: null }
     } catch (err) {
       console.error('Portal close exception:', err)
+      setCloseLoading(false)
       console.log('=== CLOSE PORTAL END (ERROR) ===')
       return { error: err.message }
     }
@@ -554,6 +573,7 @@ export const usePortals = (user) => {
     portals,
     userPortal,
     loading,
+    closeLoading,
     createPortal,
     closePortal
   }
