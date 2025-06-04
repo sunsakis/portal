@@ -391,74 +391,8 @@ export const usePortals = (user) => {
         userEmail: user.email
       })
 
-      // DETAILED PROFILE CHECK AND CREATION
-      console.log('=== PROFILE CHECK START ===')
-      
-      const { data: profileCheck, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      console.log('Profile check result:', { 
-        data: profileCheck, 
-        error: profileError,
-        errorCode: profileError?.code,
-        errorMessage: profileError?.message 
-      })
-
-      if (profileError && profileError.code === 'PGRST116') {
-        // Profile doesn't exist, create it
-        console.log('Profile missing, creating it now...')
-        
-        const profileData = {
-          id: user.id,
-          username: user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-        
-        console.log('Attempting to insert profile with data:', profileData)
-        
-        const { data: newProfile, error: createProfileError } = await supabase
-          .from('profiles')
-          .insert(profileData)
-          .select()
-          .single()
-
-        console.log('Profile creation result:', { 
-          data: newProfile, 
-          error: createProfileError,
-          errorCode: createProfileError?.code,
-          errorMessage: createProfileError?.message,
-          errorDetails: createProfileError?.details
-        })
-
-        if (createProfileError) {
-          console.error('DETAILED PROFILE ERROR:', {
-            code: createProfileError.code,
-            message: createProfileError.message,
-            details: createProfileError.details,
-            hint: createProfileError.hint
-          })
-          return { error: `Profile creation failed: ${createProfileError.message || 'Unknown error'}` }
-        }
-        
-        console.log('Profile created successfully:', newProfile)
-      } else if (profileError) {
-        console.error('Profile check failed with unexpected error:', profileError)
-        return { error: `Profile verification failed: ${profileError.message}` }
-      } else {
-        console.log('Profile already exists:', profileCheck)
-      }
-
-      console.log('=== PROFILE CHECK END ===')
-
-      // Small delay to ensure profile is properly committed
-      await new Promise(resolve => setTimeout(resolve, 100))
-
-      // Now create the portal
-      console.log('=== PORTAL CREATION START ===')
+      // SIMPLIFIED APPROACH: Try creating portal directly first
+      console.log('=== DIRECT PORTAL CREATION START ===')
       
       const portalData = {
         user_id: user.id,
@@ -486,13 +420,70 @@ export const usePortals = (user) => {
         errorMessage: error?.message 
       })
 
-      if (error) {
-        console.error('Portal creation database error:', error)
+      // If portal creation fails due to foreign key, try to handle it
+      if (error && error.code === '23503') {
+        console.log('Foreign key error detected, attempting profile creation...')
+        
+        // Try creating a minimal profile using auth.admin or a different approach
+        try {
+          console.log('Attempting RPC call for profile creation...')
+          
+          const { data: rpcResult, error: rpcError } = await supabase.rpc('create_user_profile', {
+            user_id: user.id,
+            username: user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`
+          })
+          
+          console.log('RPC result:', { rpcResult, rpcError })
+          
+          if (rpcError) {
+            console.error('RPC failed, trying direct insert with different approach...')
+            
+            // Try a different approach - insert without RLS-protected fields
+            const { error: profileError } = await supabase
+              .from('profiles')
+              .upsert({
+                id: user.id,
+                username: user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`
+              }, {
+                onConflict: 'id'
+              })
+            
+            if (profileError) {
+              console.error('Profile creation still failed:', profileError)
+              return { 
+                error: `Cannot create user profile due to security policy. Please contact support. Error: ${profileError.message}` 
+              }
+            }
+          }
+          
+          // Retry portal creation
+          console.log('Retrying portal creation after profile setup...')
+          const { data: retryData, error: retryError } = await supabase
+            .from('portals')
+            .insert(portalData)
+            .select()
+            .single()
+            
+          if (retryError) {
+            console.error('Portal creation still failed:', retryError)
+            return { error: retryError.message || 'Failed to create portal after profile setup' }
+          }
+          
+          console.log('Portal created successfully on retry:', retryData)
+          setUserPortal(retryData)
+          return { data: retryData, error: null }
+          
+        } catch (profileErr) {
+          console.error('Profile creation exception:', profileErr)
+          return { error: 'Profile creation failed due to security restrictions' }
+        }
+      } else if (error) {
+        console.error('Portal creation failed with error:', error)
         return { error: error.message || 'Failed to create portal' }
       }
 
       if (data) {
-        console.log('Portal created successfully in database:', data)
+        console.log('Portal created successfully:', data)
         setUserPortal(data)
       }
 
