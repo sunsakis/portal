@@ -32,6 +32,11 @@ export const useSupabaseAuth = () => {
       }
       setUser(session?.user ?? null)
       setLoading(false)
+      
+      // Ensure profile exists for existing session
+      if (session?.user) {
+        ensureUserProfile(session.user)
+      }
     })
 
     // Listen for auth changes
@@ -52,24 +57,79 @@ export const useSupabaseAuth = () => {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Ensure user profile exists
+  // Ensure user profile exists - FIXED VERSION
   const ensureUserProfile = async (user) => {
     if (!user || !supabase) return
 
     try {
-      const { error } = await supabase
+      console.log('Ensuring profile exists for user:', user.id)
+      
+      // First check if profile exists
+      const { data: existingProfile, error: checkError } = await supabase
         .from('profiles')
-        .upsert({
-          id: user.id,
-          username: user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`,
-          updated_at: new Date().toISOString()
-        })
+        .select('id')
+        .eq('id', user.id)
+        .single()
 
-      if (error && error.code !== '23505') {
-        console.error('Profile upsert error:', error)
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('Profile check error:', checkError)
+        return
+      }
+
+      if (!existingProfile) {
+        console.log('Creating new profile for user:', user.id)
+        
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            username: user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`,
+            email: user.email,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+
+        if (insertError) {
+          console.error('Profile creation failed:', insertError)
+        } else {
+          console.log('Profile created successfully')
+        }
+      } else {
+        console.log('Profile already exists')
       }
     } catch (err) {
       console.error('Profile creation error:', err)
+    }
+  }
+
+  // Anonymous sign-in for development
+  const signInAnonymously = async () => {
+    if (!supabase) {
+      setError('Supabase not configured')
+      return false
+    }
+
+    try {
+      setLoading(true)
+      console.log('Attempting anonymous sign-in...')
+      
+      const { data, error } = await supabase.auth.signInAnonymously()
+      
+      if (error) {
+        console.error('Anonymous sign-in failed:', error)
+        setError(error.message)
+        setLoading(false)
+        return false
+      }
+
+      console.log('Anonymous sign-in successful')
+      // Profile will be created via onAuthStateChange
+      return true
+    } catch (err) {
+      console.error('Anonymous sign-in error:', err)
+      setError(err.message)
+      setLoading(false)
+      return false
     }
   }
 
@@ -149,6 +209,7 @@ export const useSupabaseAuth = () => {
     loading, 
     error, 
     authenticateWithCode, 
+    signInAnonymously,
     signOut,
     isAuthenticated: !!user 
   }
@@ -326,9 +387,45 @@ export const usePortals = (user) => {
       console.log('Creating portal with validated coordinates:', {
         lat: location.latitude,
         lng: location.longitude,
-        acc: location.accuracy
+        acc: location.accuracy,
+        userId: user.id
       })
 
+      // CRITICAL FIX: Ensure profile exists before creating portal
+      console.log('Ensuring profile exists before portal creation...')
+      
+      const { data: profileCheck, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', user.id)
+        .single()
+
+      if (profileError && profileError.code === 'PGRST116') {
+        // Profile doesn't exist, create it
+        console.log('Profile missing, creating it now...')
+        
+        const { error: createProfileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            username: user.email?.split('@')[0] || `user_${user.id.slice(0, 8)}`,
+            email: user.email,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+
+        if (createProfileError) {
+          console.error('Failed to create profile:', createProfileError)
+          return { error: 'Failed to create user profile. Please try again.' }
+        }
+        
+        console.log('Profile created successfully')
+      } else if (profileError) {
+        console.error('Profile check failed:', profileError)
+        return { error: 'Failed to verify user profile' }
+      }
+
+      // Now create the portal
       const { data, error } = await supabase
         .from('portals')
         .insert({
