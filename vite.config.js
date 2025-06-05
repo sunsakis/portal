@@ -7,73 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      workbox: {
-        // More aggressive caching for production
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
-        navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/_/, /\/[^/?]+\.[^/]+$/],
-        
-        // Cache strategies optimized for mobile
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/api\.maptiler\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'maptiler-cache',
-              expiration: {
-                maxEntries: 200,
-                maxAgeSeconds: 24 * 60 * 60 * 7 // 7 days
-              },
-              cacheKeyWillBeUsed: async ({ request }) => {
-                // Remove query params for better cache hits
-                const url = new URL(request.url)
-                url.search = ''
-                return url.href
-              }
-            }
-          },
-          {
-            urlPattern: /^https:\/\/.*\.tile\.openstreetmap\.org\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'osm-cache',
-              expiration: {
-                maxEntries: 500,
-                maxAgeSeconds: 24 * 60 * 60 * 30 // 30 days
-              }
-            }
-          },
-          {
-            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'images-cache',
-              expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 30 * 24 * 60 * 60 // 30 days
-              }
-            }
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'google-fonts-stylesheets',
-            }
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-webfonts',
-              expiration: {
-                maxEntries: 30,
-                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
-              }
-            }
-          }
-        ]
-      },
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', '*.png'],
       manifest: {
         name: 'Portal - Location Chat',
         short_name: 'Portal',
@@ -85,7 +19,6 @@ export default defineConfig({
         start_url: '/',
         orientation: 'portrait-primary',
         categories: ['social', 'communication'],
-        
         icons: [
           {
             src: '/android/android-launchericon-192-192.png',
@@ -100,9 +33,57 @@ export default defineConfig({
             purpose: 'any maskable'
           }
         ]
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/_/, /\/[^/?]+\.[^/]+$/],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/api\.maptiler\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'maptiler-cache',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 24 * 60 * 60 * 7
+              }
+            }
+          },
+          {
+            urlPattern: /^https:\/\/.*\.tile\.openstreetmap\.org\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'osm-cache',
+              expiration: {
+                maxEntries: 200,
+                maxAgeSeconds: 24 * 60 * 60 * 30
+              }
+            }
+          },
+          {
+            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'images-cache',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 30 * 24 * 60 * 60
+              }
+            }
+          }
+        ]
       }
     })
   ],
+  
+  define: {
+    global: 'globalThis'
+  },
+  
+  worker: {
+    format: 'es'
+  },
   
   // Production optimizations
   build: {
@@ -110,7 +91,7 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true, // Remove console.logs in production
+        drop_console: true,
         drop_debugger: true
       }
     },
@@ -118,7 +99,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          maps: ['leaflet', 'react-leaflet', '@maptiler/leaflet-maptilersdk'],
+          maps: ['leaflet', 'react-leaflet'],
           ui: ['framer-motion', '@use-gesture/react']
         }
       }
@@ -126,7 +107,6 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000
   },
   
-  // Performance optimizations
   optimizeDeps: {
     include: [
       'react', 
@@ -135,14 +115,6 @@ export default defineConfig({
       'react-leaflet',
       'framer-motion'
     ]
-  },
-  
-  define: {
-    global: 'globalThis'
-  },
-  
-  worker: {
-    format: 'es'
   },
   
   server: {
