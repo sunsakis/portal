@@ -7,6 +7,7 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -26,24 +27,44 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
 
   // Load existing messages and set up real-time subscription
   useEffect(() => {
-    if (!isOpen || !portal?.id) return
+    if (!isOpen || !portal?.id || !supabase) {
+      setMessages([])
+      setError(null)
+      return
+    }
 
     const loadMessages = async () => {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('messages')
-        .select(`
-          *,
-          profiles:user_id (username, avatar_url)
-        `)
-        .eq('portal_id', portal.id)
-        .order('created_at', { ascending: true })
+      setError(null)
+      
+      try {
+        console.log('Loading messages for portal:', portal.id)
+        
+        const { data, error } = await supabase
+          .from('messages')
+          .select(`
+            id,
+            content,
+            created_at,
+            user_id,
+            message_type,
+            profiles:user_id (username, avatar_url)
+          `)
+          .eq('portal_id', portal.id)
+          .order('created_at', { ascending: true })
 
-      if (error) {
-        console.error('Error loading messages:', error)
-      } else {
-        setMessages(data || [])
+        if (error) {
+          console.error('Error loading messages:', error)
+          setError('Failed to load messages')
+        } else {
+          console.log('Messages loaded:', data?.length || 0)
+          setMessages(data || [])
+        }
+      } catch (err) {
+        console.error('Message loading failed:', err)
+        setError('Failed to load messages')
       }
+      
       setLoading(false)
     }
 
@@ -61,44 +82,68 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
           filter: `portal_id=eq.${portal.id}`
         },
         async (payload) => {
+          console.log('New message received:', payload.new)
+          
           // Fetch the new message with profile data
-          const { data } = await supabase
-            .from('messages')
-            .select(`
-              *,
-              profiles:user_id (username, avatar_url)
-            `)
-            .eq('id', payload.new.id)
-            .single()
+          try {
+            const { data, error } = await supabase
+              .from('messages')
+              .select(`
+                id,
+                content,
+                created_at,
+                user_id,
+                message_type,
+                profiles:user_id (username, avatar_url)
+              `)
+              .eq('id', payload.new.id)
+              .single()
 
-          if (data) {
-            setMessages(prev => [...prev, data])
+            if (data && !error) {
+              setMessages(prev => [...prev, data])
+            }
+          } catch (err) {
+            console.error('Error fetching new message:', err)
           }
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('Message subscription status:', status)
+      })
 
     return () => {
+      console.log('Cleaning up message subscription')
       supabase.removeChannel(channel)
     }
   }, [isOpen, portal?.id])
 
   const sendMessage = async () => {
-    if (!message.trim() || !portal?.id || !user) return
+    if (!message.trim() || !portal?.id || !user || !supabase) return
 
-    const { error } = await supabase
-      .from('messages')
-      .insert({
-        portal_id: portal.id,
-        user_id: user.id,
-        content: message.trim(),
-        message_type: 'text'
-      })
+    const messageContent = message.trim()
+    setMessage('') // Clear input immediately
 
-    if (error) {
-      console.error('Error sending message:', error)
-    } else {
-      setMessage('')
+    try {
+      console.log('Sending message:', messageContent)
+      
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          portal_id: portal.id,
+          user_id: user.id,
+          content: messageContent,
+          message_type: 'text'
+        })
+
+      if (error) {
+        console.error('Error sending message:', error)
+        setMessage(messageContent) // Restore message on error
+        setError('Failed to send message')
+      }
+    } catch (err) {
+      console.error('Message send failed:', err)
+      setMessage(messageContent) // Restore message on error
+      setError('Failed to send message')
     }
   }
 
@@ -129,6 +174,8 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
     },
     { from: () => [0, 0], filterTaps: true, bounds: { top: 0 }, rubberband: true }
   )
+
+  if (!portal) return null
 
   return (
     <AnimatePresence>
@@ -183,6 +230,17 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
                   <p className="text-gray-500 mt-2">Loading messages...</p>
                 </div>
+              ) : error ? (
+                <div className="text-center py-8">
+                  <div className="text-4xl mb-2">⚠️</div>
+                  <p className="text-red-500 text-sm">{error}</p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="mt-2 text-blue-500 text-sm hover:underline"
+                  >
+                    Refresh and try again
+                  </button>
+                </div>
               ) : messages.length === 0 ? (
                 <div className="text-center py-8">
                   <div className="text-4xl mb-2">👋</div>
@@ -218,6 +276,11 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
 
             {/* Input Area */}
             <div className="flex-shrink-0 p-4 border-t border-gray-200">
+              {error && (
+                <div className="mb-2 text-center">
+                  <p className="text-red-500 text-xs">{error}</p>
+                </div>
+              )}
               <div className="flex items-end gap-2">
                 <div className="flex-1 relative">
                   <textarea
@@ -229,13 +292,14 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
                     className="w-full px-4 py-3 border border-gray-300 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     rows="1"
                     style={{ minHeight: '44px', maxHeight: '100px' }}
+                    disabled={!supabase}
                   />
                 </div>
                 <button
                   onClick={sendMessage}
-                  disabled={!message.trim()}
+                  disabled={!message.trim() || !supabase}
                   className={`p-3 rounded-full font-medium transition-colors ${
-                    message.trim()
+                    message.trim() && supabase
                       ? 'bg-blue-500 text-white hover:bg-blue-600'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}

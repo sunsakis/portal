@@ -16,6 +16,53 @@ const generateUsername = (email, userId) => {
   return email || `user_${userId.slice(0, 8)}`
 }
 
+// Helper function to ensure user profile exists
+const ensureUserProfile = async (user) => {
+  if (!user || !supabase) return
+
+  try {
+    console.log('Ensuring profile exists for user:', user.id)
+    
+    // First check if profile exists
+    const { data: existingProfile, error: checkError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', user.id)
+      .single()
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Profile check error:', checkError)
+      return
+    }
+
+    if (!existingProfile) {
+      console.log('Creating new profile for user:', user.id)
+      
+      // Generate username (just use email)
+      const username = generateUsername(user.email, user.id)
+      
+      const { error: insertError } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          username: username,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+
+      if (insertError) {
+        console.error('Profile creation failed:', insertError)
+      } else {
+        console.log('Profile created successfully with username:', username)
+      }
+    } else {
+      console.log('Profile already exists')
+    }
+  } catch (err) {
+    console.error('Profile creation error:', err)
+  }
+}
+
 // Clean OTP authentication hook using Edge Functions
 export const useSupabaseAuth = () => {
   const [user, setUser] = useState(null)
@@ -61,53 +108,6 @@ export const useSupabaseAuth = () => {
 
     return () => subscription.unsubscribe()
   }, [])
-
-  // Ensure user profile exists - FIXED VERSION with unique username
-  const ensureUserProfile = async (user) => {
-    if (!user || !supabase) return
-
-    try {
-      console.log('Ensuring profile exists for user:', user.id)
-      
-      // First check if profile exists
-      const { data: existingProfile, error: checkError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', user.id)
-        .single()
-
-      if (checkError && checkError.code !== 'PGRST116') {
-        console.error('Profile check error:', checkError)
-        return
-      }
-
-      if (!existingProfile) {
-        console.log('Creating new profile for user:', user.id)
-        
-        // Generate username (just use email)
-        const username = generateUsername(user.email, user.id)
-        
-        const { error: insertError } = await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            username: username,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-
-        if (insertError) {
-          console.error('Profile creation failed:', insertError)
-        } else {
-          console.log('Profile created successfully with username:', username)
-        }
-      } else {
-        console.log('Profile already exists')
-      }
-    } catch (err) {
-      console.error('Profile creation error:', err)
-    }
-  }
 
   // Anonymous sign-in for development
   const signInAnonymously = async () => {
