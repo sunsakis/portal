@@ -21,9 +21,18 @@ body {
 }
 
 .leaflet-container {
-  touch-action: pan-x pan-y;
+  /* OPTIMIZED: Smooth navigation like Google Maps */
+  touch-action: manipulation;
   height: 100vh;
   width: 100vw;
+  /* Prevent text selection during navigation */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  /* Smooth rendering */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 
 .leaflet-popup-content {
@@ -73,6 +82,9 @@ body {
   left: 0;
   z-index: 2;
   cursor: pointer;
+  /* Better touch target for mobile */
+  min-width: 44px;
+  min-height: 44px;
 }
 
 .portal-pulse {
@@ -166,16 +178,49 @@ body {
     height: 30px !important;
     font-size: 20px !important;
   }
+  
+  /* IMPROVED: Better portal touch targets on mobile */
+  .portal-icon {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    margin: -7px; /* Center the larger touch target */
+  }
 }
 
-/* Touch improvements for mobile */
+/* Touch improvements for mobile - Standard map behavior */
 @media (hover: none) and (pointer: coarse) {
   .leaflet-container {
-    touch-action: pan-x pan-y pinch-zoom;
+    /* Standard touch actions for maps */
+    touch-action: manipulation;
+    /* Fast tapping for mobile */
+    -webkit-tap-highlight-color: transparent;
   }
   
   .leaflet-marker-icon {
     cursor: pointer;
+    /* Ensure touch targets are accessible */
+    min-width: 44px;
+    min-height: 44px;
+  }
+  
+  /* Smooth interactions */
+  .leaflet-container * {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    /* Hardware acceleration for smooth panning */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+  
+  /* Improve gesture recognition */
+  .leaflet-control-container {
+    pointer-events: auto;
+  }
+  
+  .leaflet-control-container * {
+    -webkit-touch-callout: none;
   }
 }
 
@@ -185,12 +230,24 @@ body {
   }
 }
 
-/* Prevent text selection on map interactions */
-.leaflet-container {
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
+/* OPTIMIZED: Smooth map navigation and performance */
+@media (pointer: coarse) {
+  .leaflet-container {
+    /* Perfect touch responsiveness */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    /* Smooth rendering */
+    will-change: transform;
+  }
+  
+  /* Fast, responsive controls */
+  .leaflet-control-zoom a {
+    transition: all 0.1s ease;
+  }
+  
+  .leaflet-control-zoom a:active {
+    transform: scale(0.95);
+  }
 }
 
 /* Custom scrollbar for bottom sheet */

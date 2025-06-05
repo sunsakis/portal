@@ -8,6 +8,8 @@ import { UserPortalMarker, OtherPortalsMarkers } from './MapMarkers'
 import ChatPortal from './ChatPortal'
 import Toast from './Toast'
 import MapLayers from './MapLayers'
+import ConnectionStatus from './ConnectionStatus'
+import PortalInstructions from './PortalInstructions'
 
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-defaulticon-compatibility'
@@ -16,23 +18,27 @@ import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility
 export default function Map() {
   const { user, loading: authLoading, signInAnonymously, error: authError } = useSupabaseAuth()
   const { error: geoError, getCurrentLocation } = useGeolocation()
-  const { portals, userPortal, createPortal, closePortal } = usePortals(user)
+  const { portals, userPortal, createPortal, closePortal, connectionStatus } = usePortals(user)
   
   const [selectedPortal, setSelectedPortal] = useState(null)
   const [showChatPortal, setShowChatPortal] = useState(false)
   const [toasts, setToasts] = useState([])
   const [isPlacingPin, setIsPlacingPin] = useState(false)
-  const [debugInfo, setDebugInfo] = useState([])
+  
+  // DEBUG TAB - Only visible in development or when enabled
   const [showDebug, setShowDebug] = useState(false)
+  const [debugInfo, setDebugInfo] = useState([])
+  const isDev = import.meta.env.DEV || window.location.hostname === 'localhost'
 
   // Default location (Vilnius)
   const defaultLocation = { latitude: 54.697325, longitude: 25.315356 }
 
   // Debug logging function
   const addDebugLog = useCallback((message, type = 'info') => {
+    if (!isDev && !showDebug) return // Only log in dev or when debug enabled
     const timestamp = new Date().toLocaleTimeString()
-    setDebugInfo(prev => [...prev.slice(-10), { timestamp, message, type }]) // Keep last 10 logs
-  }, [])
+    setDebugInfo(prev => [...prev.slice(-10), { timestamp, message, type }])
+  }, [isDev, showDebug])
 
   // Toast utilities
   const addToast = useCallback((message, type = 'info') => {
@@ -53,24 +59,9 @@ export default function Map() {
     }
   }, [authLoading, user, signInAnonymously, addDebugLog])
 
-  // Debug environment variables and auth state
-  useEffect(() => {
-    const envCheck = {
-      supabaseUrl: import.meta.env.VITE_SUPABASE_URL ? 'SET' : 'MISSING',
-      supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'SET' : 'MISSING',
-      maptilerKey: import.meta.env.VITE_MAPTILER_API ? 'SET' : 'MISSING',
-      user: user ? `YES (${user.id.slice(0, 8)}...)` : 'NO',
-      authError: authError || 'NONE'
-    }
-    addDebugLog(`Environment: ${JSON.stringify(envCheck)}`, 'info')
-  }, [user, authError, addDebugLog])
-
   const handleCreatePortal = async () => {
-    addDebugLog('=== CREATE PORTAL START ===', 'info')
-    
     if (!user || isPlacingPin) {
-      addDebugLog(`Cannot create: user=${!!user}, isPlacing=${isPlacingPin}`, 'warning')
-      addToast('Please wait, signing you in...', 'info')
+      addToast('Please wait...', 'info')
       return
     }
 
@@ -79,22 +70,19 @@ export default function Map() {
     addToast('Getting your location...', 'info')
 
     try {
-      addDebugLog('Getting location...', 'info')
       const userLocation = await getCurrentLocation()
       addDebugLog(`Location: ${userLocation.latitude}, ${userLocation.longitude} (±${userLocation.accuracy}m)`, 'success')
       
-      addDebugLog('Calling createPortal...', 'info')
       const { data, error } = await createPortal(userLocation)
 
       if (error) {
-        const errorMsg = typeof error === 'string' ? error : (error.message || JSON.stringify(error))
-        addDebugLog(`Portal creation error: ${errorMsg}`, 'error')
-        addToast(`Failed to create portal: ${errorMsg}`, 'error')
+        addDebugLog(`Portal creation error: ${error}`, 'error')
+        addToast(`Failed to create portal: ${error}`, 'error')
       } else {
         addDebugLog(`Portal created successfully: ${data?.id}`, 'success')
         addToast(`Portal opened! (±${Math.round(userLocation.accuracy)}m)`, 'success')
         
-        // Auto-close after 5 minutes for demo
+        // Auto-close after 5 minutes
         setTimeout(() => {
           handleClosePortal()
           addToast('Portal closed automatically', 'info')
@@ -106,18 +94,14 @@ export default function Map() {
       addToast(geoError || errorMsg || 'Could not get location', 'error')
     } finally {
       setIsPlacingPin(false)
-      addDebugLog('=== CREATE PORTAL END ===', 'info')
     }
   }
 
   const handleClosePortal = async () => {
-    addDebugLog('Closing portal...', 'info')
     const { error } = await closePortal()
     if (error) {
-      addDebugLog(`Portal close error: ${error}`, 'error')
       addToast('Failed to close portal', 'error')
     } else {
-      addDebugLog('Portal closed successfully', 'success')
       addToast('Portal closed', 'info')
     }
   }
@@ -127,16 +111,23 @@ export default function Map() {
     setShowChatPortal(true)
   }
 
-  const handleDoubleTap = useCallback(() => {
-    if (!userPortal) {
-      handleCreatePortal()
+  // Handle debug tab activation (long press on logo area)
+  const [debugPressStart, setDebugPressStart] = useState(0)
+  const handleDebugActivation = useCallback(() => {
+    const pressTime = Date.now() - debugPressStart
+    if (pressTime > 2000) { // 2 second long press
+      setShowDebug(!showDebug)
+      addToast(showDebug ? 'Debug disabled' : 'Debug enabled', 'info')
     }
-  }, [userPortal, handleCreatePortal])
+  }, [debugPressStart, showDebug, addToast])
 
   if (authLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading Portal...</p>
+        </div>
       </div>
     )
   }
@@ -145,6 +136,15 @@ export default function Map() {
 
   return (
     <div className="relative h-screen w-full overflow-hidden">
+      {/* Real-time Connection Status */}
+      <ConnectionStatus 
+        connectionStatus={connectionStatus}
+        onRetry={() => {
+          addDebugLog('Manual connection retry', 'info')
+          signInAnonymously()
+        }}
+      />
+
       {/* Toasts */}
       <AnimatePresence>
         {toasts.map(toast => (
@@ -157,15 +157,17 @@ export default function Map() {
         ))}
       </AnimatePresence>
 
-      {/* Debug Toggle Button - Always visible */}
-      <button
-        onClick={() => setShowDebug(!showDebug)}
-        className="fixed top-4 right-4 bg-black/80 text-white p-2 rounded-full text-xs z-[2001] w-12 h-12 flex items-center justify-center"
-      >
-        🐛
-      </button>
+      {/* Debug Toggle - Hidden until activated */}
+      {(isDev || showDebug) && (
+        <button
+          onClick={() => setShowDebug(!showDebug)}
+          className="fixed top-4 right-4 bg-black/80 text-white p-2 rounded-full text-xs z-[2001] w-10 h-10 flex items-center justify-center"
+        >
+          🐛
+        </button>
+      )}
 
-      {/* Debug Panel */}
+      {/* Debug Panel - Production Safe */}
       <AnimatePresence>
         {showDebug && (
           <motion.div
@@ -174,16 +176,26 @@ export default function Map() {
             exit={{ x: '100%' }}
             className="fixed top-0 right-0 w-80 h-full bg-black/95 text-white p-4 z-[2000] overflow-y-auto"
           >
-            <h3 className="text-lg font-bold mb-4">Debug Info</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">Debug Console</h3>
+              <button
+                onClick={() => setShowDebug(false)}
+                className="text-white/60 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
             
             <div className="mb-4">
-              <h4 className="text-sm font-semibold mb-2">Environment:</h4>
+              <h4 className="text-sm font-semibold mb-2">Status:</h4>
               <div className="text-xs space-y-1">
-                <div>Supabase URL: {import.meta.env.VITE_SUPABASE_URL ? '✅ SET' : '❌ MISSING'}</div>
-                <div>Supabase Key: {import.meta.env.VITE_SUPABASE_ANON_KEY ? '✅ SET' : '❌ MISSING'}</div>
-                <div>User: {user ? `✅ ${user.id.slice(0, 8)}...` : '❌ NO USER'}</div>
-                <div>Auth Error: {authError || 'None'}</div>
-                <div>Geo Error: {geoError || 'None'}</div>
+                <div>Environment: {isDev ? 'DEV' : 'PROD'}</div>
+                <div>Supabase: {import.meta.env.VITE_SUPABASE_URL ? '✅' : '❌'}</div>
+                <div>User: {user ? `✅ ${user.id.slice(0, 8)}...` : '❌'}</div>
+                <div>Portal: {userPortal ? '🟢 Active' : '⚪ Inactive'}</div>
+                <div>Portals nearby: {portals.length}</div>
+                <div>Connection: {connectionStatus}</div>
+                <div>Real-time: {connectionStatus === 'connected' ? '✅' : '❌'}</div>
               </div>
             </div>
 
@@ -191,26 +203,14 @@ export default function Map() {
               <h4 className="text-sm font-semibold mb-2">Actions:</h4>
               <div className="space-y-2">
                 <button
-                  onClick={() => {
-                    addDebugLog('Manual auth attempt', 'info')
-                    signInAnonymously()
-                  }}
-                  className="block w-full text-xs bg-blue-600 p-2 rounded"
-                >
-                  Try Auth
-                </button>
-                <button
-                  onClick={() => {
-                    addDebugLog('Manual location attempt', 'info')
-                    getCurrentLocation().then(loc => {
-                      addDebugLog(`Manual location: ${loc.latitude}, ${loc.longitude}`, 'success')
-                    }).catch(err => {
-                      addDebugLog(`Manual location error: ${err.message}`, 'error')
-                    })
-                  }}
+                  onClick={() => getCurrentLocation().then(loc => {
+                    addDebugLog(`Test location: ${loc.latitude}, ${loc.longitude}`, 'success')
+                  }).catch(err => {
+                    addDebugLog(`Location error: ${err.message}`, 'error')
+                  })}
                   className="block w-full text-xs bg-green-600 p-2 rounded"
                 >
-                  Test Location
+                  Test GPS
                 </button>
                 <button
                   onClick={() => setDebugInfo([])}
@@ -222,18 +222,22 @@ export default function Map() {
             </div>
 
             <div>
-              <h4 className="text-sm font-semibold mb-2">Logs:</h4>
+              <h4 className="text-sm font-semibold mb-2">Console:</h4>
               <div className="text-xs space-y-1 max-h-96 overflow-y-auto">
-                {debugInfo.map((log, i) => (
-                  <div key={i} className={`p-1 rounded ${
-                    log.type === 'error' ? 'bg-red-900/50' :
-                    log.type === 'success' ? 'bg-green-900/50' :
-                    log.type === 'warning' ? 'bg-yellow-900/50' :
-                    'bg-gray-800/50'
-                  }`}>
-                    <span className="text-gray-400">{log.timestamp}</span> {log.message}
-                  </div>
-                ))}
+                {debugInfo.length === 0 ? (
+                  <div className="text-gray-400">No logs...</div>
+                ) : (
+                  debugInfo.map((log, i) => (
+                    <div key={i} className={`p-1 rounded ${
+                      log.type === 'error' ? 'bg-red-900/50' :
+                      log.type === 'success' ? 'bg-green-900/50' :
+                      log.type === 'warning' ? 'bg-yellow-900/50' :
+                      'bg-gray-800/50'
+                    }`}>
+                      <span className="text-gray-400">{log.timestamp}</span> {log.message}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </motion.div>
@@ -260,19 +264,22 @@ export default function Map() {
         style={{ height: "100%", width: "100%" }}
         zoomControl={false}
         attributionControl={true}
-        doubleClickZoom={false}
+        doubleClickZoom={true}
+        scrollWheelZoom={true}
+        dragging={true}
+        touchZoom={true}
+        boxZoom={true}
+        keyboard={true}
       >
         <MapLayers maptilerApiKey={import.meta.env.VITE_MAPTILER_API} />
         <MapControls />
-        <MapEventHandler onDoubleTap={handleDoubleTap} />
+        <MapEventHandler />
         
-        {/* User's portal marker */}
         <UserPortalMarker 
           portal={userPortal} 
           onPortalClick={handlePortalClick} 
         />
         
-        {/* Other user portals */}
         <OtherPortalsMarkers 
           portals={portals}
           userId={user?.id}
@@ -288,6 +295,18 @@ export default function Map() {
         user={user}
       />
 
+      {/* Portal Instructions for new users */}
+      <PortalInstructions userPortal={userPortal} />
+
+      {/* Hidden debug activation area - Long press app title area */}
+      <div 
+        className="fixed top-4 left-4 w-20 h-10 z-[1500]"
+        onTouchStart={() => setDebugPressStart(Date.now())}
+        onTouchEnd={handleDebugActivation}
+        onMouseDown={() => setDebugPressStart(Date.now())}
+        onMouseUp={handleDebugActivation}
+      />
+
       {/* Main action button */}
       <motion.button
         initial={{ scale: 0 }}
@@ -299,7 +318,7 @@ export default function Map() {
             ? 'bg-red-500 hover:bg-red-600' 
             : 'bg-green-500 hover:bg-green-600'
         } text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-semibold transition-colors z-[1600]`}
-        style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        style={{ marginBottom: 'max(env(safe-area-inset-bottom, 0px), 20px)' }}
         onClick={userPortal ? handleClosePortal : handleCreatePortal}
         disabled={isPlacingPin}
       >

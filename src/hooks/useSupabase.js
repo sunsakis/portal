@@ -322,11 +322,34 @@ export const useGeolocation = () => {
   return { location, error, loading, getCurrentLocation }
 }
 
-// Production-ready portal management hook
+// Optimized portal management hook with instant real-time updates
 export const usePortals = (user) => {
   const [portals, setPortals] = useState([])
   const [userPortal, setUserPortal] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState('connecting')
+
+  // Track connection health
+  useEffect(() => {
+    if (!supabase) return
+
+    const channel = supabase.channel('connection_status')
+    
+    channel
+      .on('system', {}, (payload) => {
+        if (payload.extension === 'postgres_changes') {
+          setConnectionStatus('connected')
+        }
+      })
+      .subscribe((status) => {
+        setConnectionStatus(status)
+        console.log('Real-time connection status:', status)
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
 
   useEffect(() => {
     if (!user || !supabase) return
@@ -359,27 +382,120 @@ export const usePortals = (user) => {
 
     loadPortals()
 
-    // Real-time subscription
+    // OPTIMIZED Real-time subscription with specific event handling
     const channel = supabase
-      .channel('portals')
+      .channel('portals_realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'portals' },
-        () => loadPortals()
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'portals',
+          filter: 'is_active=eq.true' // Only active portals
+        },
+        async (payload) => {
+          console.log('Portal created:', payload.new)
+          
+          // Fetch complete portal data with profile
+          const { data, error } = await supabase
+            .from('portals')
+            .select(`
+              *,
+              profiles:user_id (username, avatar_url)
+            `)
+            .eq('id', payload.new.id)
+            .single()
+
+          if (data && !error) {
+            // Add to portals list
+            setPortals(prev => {
+              // Avoid duplicates
+              if (prev.find(p => p.id === data.id)) return prev
+              return [data, ...prev]
+            })
+
+            // Update user portal if it's theirs
+            if (data.user_id === user.id) {
+              setUserPortal(data)
+            }
+          }
+        }
       )
-      .subscribe()
+      .on(
+        'postgres_changes',
+        { 
+          event: 'DELETE', 
+          schema: 'public', 
+          table: 'portals' 
+        },
+        (payload) => {
+          console.log('Portal deleted:', payload.old)
+          
+          // Remove from portals list
+          setPortals(prev => prev.filter(p => p.id !== payload.old.id))
+          
+          // Clear user portal if it was theirs
+          if (payload.old.user_id === user.id) {
+            setUserPortal(null)
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'portals' 
+        },
+        async (payload) => {
+          console.log('Portal updated:', payload.new)
+          
+          // Fetch complete updated data
+          const { data, error } = await supabase
+            .from('portals')
+            .select(`
+              *,
+              profiles:user_id (username, avatar_url)
+            `)
+            .eq('id', payload.new.id)
+            .single()
+
+          if (data && !error) {
+            // Update in portals list
+            setPortals(prev => prev.map(p => 
+              p.id === data.id ? data : p
+            ))
+
+            // Update user portal if it's theirs
+            if (data.user_id === user.id) {
+              setUserPortal(data)
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('Portal subscription status:', status)
+        if (status === 'SUBSCRIBED') {
+          setConnectionStatus('connected')
+        } else if (status === 'CHANNEL_ERROR') {
+          setConnectionStatus('error')
+          // Retry connection after 5 seconds
+          setTimeout(loadPortals, 5000)
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)
     }
   }, [user])
 
+  // Optimistic portal creation
   const createPortal = async (location) => {
     if (!user || !supabase) {
       return { error: 'Not authenticated' }
     }
 
-    // Validate location data before database insertion
+    // Validate location
     if (!location || 
         typeof location.latitude !== 'number' || 
         typeof location.longitude !== 'number' ||
@@ -390,87 +506,29 @@ export const usePortals = (user) => {
       return { error: 'Invalid location coordinates' }
     }
 
+    // Optimistic update - show portal immediately
+    const optimisticPortal = {
+      id: `temp_${Date.now()}`,
+      user_id: user.id,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracy: location.accuracy || 100,
+      title: 'Chat Portal',
+      description: 'Available for chat',
+      is_active: true,
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      profiles: { username: user.email || 'You', avatar_url: null },
+      _optimistic: true // Flag for styling
+    }
+
+    setUserPortal(optimisticPortal)
+    setPortals(prev => [optimisticPortal, ...prev])
+
     try {
-      console.log('Creating portal with validated coordinates:', {
-        lat: location.latitude,
-        lng: location.longitude,
-        acc: location.accuracy,
-        userId: user.id,
-        userEmail: user.email
-      })
+      // Ensure profile exists first
+      await ensureUserProfile(user)
 
-      // IMPROVED PROFILE CHECK AND CREATION
-      console.log('=== PROFILE CHECK START ===')
-      
-      const { data: profileCheck, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      console.log('Profile check result:', { 
-        data: profileCheck, 
-        error: profileError,
-        errorCode: profileError?.code,
-        errorMessage: profileError?.message 
-      })
-
-      if (profileError && profileError.code === 'PGRST116') {
-        // Profile doesn't exist, create it with unique username
-        console.log('Profile missing, creating it now...')
-        
-        // Generate username (just use email)
-        const username = generateUsername(user.email, user.id)
-        
-        const profileData = {
-          id: user.id,
-          username: username,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-        
-        console.log('Attempting to insert profile with data:', profileData)
-        
-        const { data: newProfile, error: createProfileError } = await supabase
-          .from('profiles')
-          .insert(profileData)
-          .select()
-          .single()
-
-        console.log('Profile creation result:', { 
-          data: newProfile, 
-          error: createProfileError,
-          errorCode: createProfileError?.code,
-          errorMessage: createProfileError?.message,
-          errorDetails: createProfileError?.details
-        })
-
-        if (createProfileError) {
-          console.error('DETAILED PROFILE ERROR:', {
-            code: createProfileError.code,
-            message: createProfileError.message,
-            details: createProfileError.details,
-            hint: createProfileError.hint
-          })
-          return { error: `Profile creation failed: ${createProfileError.message || 'Unknown error'}` }
-        }
-        
-        console.log('Profile created successfully with email as username:', newProfile)
-      } else if (profileError) {
-        console.error('Profile check failed with unexpected error:', profileError)
-        return { error: `Profile verification failed: ${profileError.message}` }
-      } else {
-        console.log('Profile already exists:', profileCheck)
-      }
-
-      console.log('=== PROFILE CHECK END ===')
-
-      // Small delay to ensure profile is properly commited
-      await new Promise(resolve => setTimeout(resolve, 100))
-
-      // Now create the portal
-      console.log('=== PORTAL CREATION START ===')
-      
       const portalData = {
         user_id: user.id,
         latitude: location.latitude,
@@ -481,8 +539,6 @@ export const usePortals = (user) => {
         is_active: true,
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
       }
-      
-      console.log('Creating portal with data:', portalData)
 
       const { data, error } = await supabase
         .from('portals')
@@ -490,52 +546,59 @@ export const usePortals = (user) => {
         .select()
         .single()
 
-      console.log('Portal creation result:', { 
-        data, 
-        error,
-        errorCode: error?.code,
-        errorMessage: error?.message 
-      })
-
       if (error) {
-        console.error('Portal creation database error:', error)
+        // Remove optimistic update on error
+        setUserPortal(null)
+        setPortals(prev => prev.filter(p => p.id !== optimisticPortal.id))
         return { error: error.message || 'Failed to create portal' }
       }
 
-      if (data) {
-        console.log('Portal created successfully in database:', data)
-        setUserPortal(data)
-      }
+      // Replace optimistic update with real data
+      const realPortal = { ...data, profiles: optimisticPortal.profiles }
+      setUserPortal(realPortal)
+      setPortals(prev => prev.map(p => 
+        p.id === optimisticPortal.id ? realPortal : p
+      ))
 
-      console.log('=== PORTAL CREATION END ===')
       return { data, error: null }
     } catch (err) {
-      console.error('Portal creation exception:', err)
+      // Remove optimistic update on error
+      setUserPortal(null)
+      setPortals(prev => prev.filter(p => p.id !== optimisticPortal.id))
       return { error: err.message || 'Portal creation failed' }
     }
   }
 
+  // Optimistic portal deletion
   const closePortal = async () => {
     if (!userPortal || !user || !supabase) {
       return { error: 'No portal to close' }
     }
 
+    const portalToDelete = userPortal
+
+    // Optimistic update - hide portal immediately
+    setUserPortal(null)
+    setPortals(prev => prev.filter(p => p.id !== portalToDelete.id))
+
     try {
-      // DELETE the portal instead of updating is_active
       const { error } = await supabase
         .from('portals')
         .delete()
-        .eq('id', userPortal.id)
+        .eq('id', portalToDelete.id)
 
       if (error) {
-        console.error('Portal delete error:', error)
+        // Restore portal on error
+        setUserPortal(portalToDelete)
+        setPortals(prev => [portalToDelete, ...prev])
         return { error: error.message }
       }
 
-      setUserPortal(null)
       return { error: null }
     } catch (err) {
-      console.error('Portal delete failed:', err)
+      // Restore portal on error
+      setUserPortal(portalToDelete)
+      setPortals(prev => [portalToDelete, ...prev])
       return { error: err.message }
     }
   }
@@ -544,6 +607,7 @@ export const usePortals = (user) => {
     portals,
     userPortal,
     loading,
+    connectionStatus,
     createPortal,
     closePortal
   }

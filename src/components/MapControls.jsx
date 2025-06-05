@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react'
-import { useMap, useMapEvents } from 'react-leaflet'
+import React, { useEffect } from 'react'
+import { useMap } from 'react-leaflet'
 import L from 'leaflet'
 
 // Mobile detection
@@ -9,49 +9,41 @@ const isMobileDevice = () => {
          'ontouchstart' in window
 }
 
-// Map controls and zoom positioning
+// Standard map controls - familiar behavior like Google Maps
 export const MapControls = () => {
   const map = useMap()
   
   useEffect(() => {
-    map.doubleClickZoom.disable()
+    // Enable ALL standard map interactions
+    map.doubleClickZoom.enable()  // Double click/tap to zoom
+    map.scrollWheelZoom.enable()  // Mouse wheel zoom
+    map.boxZoom.enable()          // Shift+drag to zoom
+    map.keyboard.enable()         // Arrow keys and +/- keys
+    map.dragging.enable()         // Pan/drag
+    map.touchZoom.enable()        // Pinch to zoom on mobile
     
-    // Position zoom controls on mobile
+    // Position zoom controls appropriately for device
     const zoomControl = L.control.zoom({ 
       position: isMobileDevice() ? 'bottomright' : 'topleft'
     })
     map.addControl(zoomControl)
     
-    return () => map.removeControl(zoomControl)
+    // Set reasonable zoom limits
+    map.setMinZoom(3)   // World view
+    map.setMaxZoom(19)  // Street level detail
+    
+    return () => {
+      map.removeControl(zoomControl)
+    }
   }, [map])
   
   return null
 }
 
-// Map event handler for pin placement
-export const MapEventHandler = ({ onDoubleTap }) => {
-  const lastTapRef = useRef(0)
-  const tapTimeoutRef = useRef(null)
-
-  useMapEvents({
-    click: (e) => {
-      if (!isMobileDevice()) return
-
-      const now = Date.now()
-      const timeSinceLastTap = now - lastTapRef.current
-
-      if (timeSinceLastTap < 300) {
-        clearTimeout(tapTimeoutRef.current)
-        onDoubleTap(e)
-      } else {
-        tapTimeoutRef.current = setTimeout(() => {
-          // Single tap - do nothing
-        }, 300)
-      }
-
-      lastTapRef.current = now
-    }
-  })
-
+// Minimal event handler - just for analytics/debugging, no portal actions
+export const MapEventHandler = () => {
+  // No map click handlers needed - pure navigation experience
+  // Portal creation is ONLY via the dedicated button
+  
   return null
 }
