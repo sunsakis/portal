@@ -25,21 +25,20 @@ export default function Map() {
   const [toasts, setToasts] = useState([])
   const [isPlacingPin, setIsPlacingPin] = useState(false)
   
-  // ALWAYS SHOW DEBUG - Console always visible for mobile testing
-  const [showDebug, setShowDebug] = useState(true) // Changed from false to true
+  // DEBUG TAB - Only visible in development or when enabled
+  const [showDebug, setShowDebug] = useState(false)
   const [debugInfo, setDebugInfo] = useState([])
-  const [debugMinimized, setDebugMinimized] = useState(false)
   const isDev = import.meta.env.DEV || window.location.hostname === 'localhost'
 
   // Default location (Vilnius)
   const defaultLocation = { latitude: 54.697325, longitude: 25.315356 }
 
-  // Debug logging function - ALWAYS ACTIVE
+  // Debug logging function
   const addDebugLog = useCallback((message, type = 'info') => {
+    if (!isDev && !showDebug) return // Only log in dev or when debug enabled
     const timestamp = new Date().toLocaleTimeString()
-    setDebugInfo(prev => [...prev.slice(-20), { timestamp, message, type }]) // Keep more logs
-    console.log(`[${timestamp}] ${type.toUpperCase()}: ${message}`) // Always log to browser console too
-  }, [])
+    setDebugInfo(prev => [...prev.slice(-10), { timestamp, message, type }])
+  }, [isDev, showDebug])
 
   // Toast utilities
   const addToast = useCallback((message, type = 'info') => {
@@ -60,36 +59,6 @@ export default function Map() {
     }
   }, [authLoading, user, signInAnonymously, addDebugLog])
 
-  // Initial debug info
-  useEffect(() => {
-    addDebugLog('Portal app initialized', 'info')
-    addDebugLog(`Environment: ${import.meta.env.DEV ? 'DEVELOPMENT' : 'PRODUCTION'}`, 'info')
-    addDebugLog(`Supabase URL: ${import.meta.env.VITE_SUPABASE_URL ? 'configured' : 'missing'}`, 'info')
-    addDebugLog(`MapTiler API: ${import.meta.env.VITE_MAPTILER_API ? 'configured' : 'missing'}`, 'info')
-  }, [addDebugLog])
-
-  // Log connection status changes
-  useEffect(() => {
-    addDebugLog(`Connection status: ${connectionStatus}`, connectionStatus === 'connected' ? 'success' : 'warning')
-  }, [connectionStatus, addDebugLog])
-
-  // Log auth state changes
-  useEffect(() => {
-    if (user) {
-      addDebugLog(`User authenticated: ${user.id}`, 'success')
-    } else if (!authLoading) {
-      addDebugLog('User not authenticated', 'warning')
-    }
-  }, [user, authLoading, addDebugLog])
-
-  // Log portal changes
-  useEffect(() => {
-    addDebugLog(`Portals nearby: ${portals.length}`, 'info')
-    if (userPortal) {
-      addDebugLog(`User portal active: ${userPortal.id}`, 'success')
-    }
-  }, [portals, userPortal, addDebugLog])
-
   const handleCreatePortal = async () => {
     if (!user || isPlacingPin) {
       addToast('Please wait...', 'info')
@@ -101,11 +70,9 @@ export default function Map() {
     addToast('Getting your location...', 'info')
 
     try {
-      addDebugLog('Requesting GPS location...', 'info')
       const userLocation = await getCurrentLocation()
-      addDebugLog(`Location obtained: ${userLocation.latitude}, ${userLocation.longitude} (±${userLocation.accuracy}m)`, 'success')
+      addDebugLog(`Location: ${userLocation.latitude}, ${userLocation.longitude} (±${userLocation.accuracy}m)`, 'success')
       
-      addDebugLog('Sending portal creation request...', 'info')
       const { data, error } = await createPortal(userLocation)
 
       if (error) {
@@ -123,28 +90,23 @@ export default function Map() {
       }
     } catch (err) {
       const errorMsg = err.message || err.toString()
-      addDebugLog(`Exception during portal creation: ${errorMsg}`, 'error')
+      addDebugLog(`Exception: ${errorMsg}`, 'error')
       addToast(geoError || errorMsg || 'Could not get location', 'error')
     } finally {
       setIsPlacingPin(false)
-      addDebugLog('Portal creation process completed', 'info')
     }
   }
 
   const handleClosePortal = async () => {
-    addDebugLog('Closing portal...', 'info')
     const { error } = await closePortal()
     if (error) {
-      addDebugLog(`Portal close error: ${error}`, 'error')
       addToast('Failed to close portal', 'error')
     } else {
-      addDebugLog('Portal closed successfully', 'success')
       addToast('Portal closed', 'info')
     }
   }
 
   const handlePortalClick = (portal) => {
-    addDebugLog(`Portal clicked: ${portal.id}`, 'info')
     setSelectedPortal(portal)
     setShowChatPortal(true)
   }
@@ -178,7 +140,7 @@ export default function Map() {
       <ConnectionStatus 
         connectionStatus={connectionStatus}
         onRetry={() => {
-          addDebugLog('Manual connection retry triggered', 'info')
+          addDebugLog('Manual connection retry', 'info')
           signInAnonymously()
         }}
       />
@@ -195,7 +157,7 @@ export default function Map() {
         ))}
       </AnimatePresence>
 
-      {/* Debug Toggle - Hidden until activated (kept for compatibility) */}
+      {/* Debug Toggle - Hidden until activated */}
       {(isDev || showDebug) && (
         <button
           onClick={() => setShowDebug(!showDebug)}
@@ -205,95 +167,9 @@ export default function Map() {
         </button>
       )}
 
-      {/* ALWAYS VISIBLE Debug Console - Better Positioned */}
-      <motion.div
-        initial={{ x: debugMinimized ? '85%' : 0 }}
-        animate={{ x: debugMinimized ? '85%' : 0 }}
-        className="fixed top-16 right-2 w-72 max-h-80 bg-black/90 text-white z-[2000] flex flex-col rounded-lg shadow-xl border border-gray-700"
-      >
-        {/* Debug Header */}
-        <div className="flex items-center justify-between p-2 bg-black/80 border-b border-gray-600 rounded-t-lg">
-          <h3 className="text-xs font-bold">🐛 Debug</h3>
-          <div className="flex gap-1">
-            <button
-              onClick={() => setDebugMinimized(!debugMinimized)}
-              className="text-white/60 hover:text-white text-xs px-1 py-0.5 rounded"
-            >
-              {debugMinimized ? '◀' : '▶'}
-            </button>
-            <button
-              onClick={() => setDebugInfo([])}
-              className="text-white/60 hover:text-white text-xs px-1 py-0.5 rounded"
-            >
-              🗑
-            </button>
-          </div>
-        </div>
-        
-        {!debugMinimized && (
-          <>
-            {/* Compact Status Section */}
-            <div className="p-2 border-b border-gray-600 text-xs">
-              <div className="grid grid-cols-2 gap-1 text-xs">
-                <div>User: {user ? '✅' : '❌'}</div>
-                <div>Portal: {userPortal ? '🟢' : '⚪'}</div>
-                <div>Nearby: {portals.length}</div>
-                <div>Status: {connectionStatus === 'connected' ? '🟢' : '🔴'}</div>
-              </div>
-            </div>
-
-            {/* Compact Actions */}
-            <div className="p-2 border-b border-gray-600">
-              <div className="flex gap-1">
-                <button
-                  onClick={() => getCurrentLocation().then(loc => {
-                    addDebugLog(`GPS: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)} ±${loc.accuracy}m`, 'success')
-                  }).catch(err => {
-                    addDebugLog(`GPS failed: ${err.message}`, 'error')
-                  })}
-                  className="text-xs bg-green-600 px-2 py-1 rounded flex-1"
-                >
-                  GPS
-                </button>
-                <button
-                  onClick={() => {
-                    addDebugLog('Refreshing...', 'info')
-                    window.location.reload()
-                  }}
-                  className="text-xs bg-blue-600 px-2 py-1 rounded flex-1"
-                >
-                  Refresh
-                </button>
-              </div>
-            </div>
-
-            {/* Compact Console Logs */}
-            <div className="flex-1 overflow-y-auto p-2 max-h-48">
-              <div className="text-xs space-y-1">
-                {debugInfo.length === 0 ? (
-                  <div className="text-gray-400">Ready...</div>
-                ) : (
-                  debugInfo.slice(-8).map((log, i) => (
-                    <div key={i} className={`p-1 rounded text-xs ${
-                      log.type === 'error' ? 'bg-red-900/50 text-red-200' :
-                      log.type === 'success' ? 'bg-green-900/50 text-green-200' :
-                      log.type === 'warning' ? 'bg-yellow-900/50 text-yellow-200' :
-                      'bg-gray-800/50 text-gray-300'
-                    }`}>
-                      <span className="text-gray-400 text-xs">{log.timestamp}</span>
-                      <div className="text-xs">{log.message}</div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </>
-        )}
-      </motion.div>
-
-      {/* Original Debug Panel - kept for compatibility (now hidden by default) */}
+      {/* Debug Panel - Production Safe */}
       <AnimatePresence>
-        {showDebug && false && ( // Always false to hide the old panel
+        {showDebug && (
           <motion.div
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
@@ -414,10 +290,7 @@ export default function Map() {
       {/* Chat Portal Interface */}
       <ChatPortal
         isOpen={showChatPortal}
-        onClose={() => {
-          addDebugLog('Chat portal closed', 'info')
-          setShowChatPortal(false)
-        }}
+        onClose={() => setShowChatPortal(false)}
         portal={selectedPortal}
         user={user}
       />
