@@ -8,7 +8,7 @@ export const createUserLocationIcon = () => {
     html: `
       <div class="user-location-wrapper">
         <div class="user-location-pulse"></div>
-        <div class="user-location-dot"></div>
+        <div class="user-location-dot">🟢</div>
       </div>
     `,
     className: 'user-location-marker',
@@ -23,7 +23,7 @@ export const createPortalIcon = () => {
     html: `
       <div class="portal-wrapper">
         <div class="portal-pulse"></div>
-        <div class="portal-icon">🧌</div>
+        <div class="portal-icon"></div>
       </div>
     `,
     className: 'portal-marker',
