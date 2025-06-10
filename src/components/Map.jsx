@@ -275,16 +275,18 @@ export default function Map() {
 
       {/* Main Action Button */}
       <motion.button
-        className={`fixed bottom-6 text-white px-4 py-3 rounded-full shadow-xl flex items-center gap-3 font-semibold transition-colors z-[1600] ${
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 justify ${
           userPortal 
             ? 'bg-red-500 hover:bg-red-600 opacity-50' 
             : 'bg-green-500 hover:bg-green-600 opacity-50'
-        }`}
-        style={{ 
-          left: '53%',
-          transform: 'translateX(-50%)',
-          marginBottom: 'max(env(safe-area-inset-bottom, 0px), 20px)'
-        }}
+        } text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-semibold transition-colors z-[1600]`}
+        style={{ marginBottom: 'max(env(safe-area-inset-bottom, 0px), 20px)' }}
+        onClick={userPortal ? handleClosePortal : handleCreatePortal}
+        disabled={isPlacingPin}
       >
         {isPlacingPin ? (
           <>
