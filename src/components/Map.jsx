@@ -17,8 +17,8 @@ import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility
 
 export default function Map() {
   const { user, loading: authLoading, signInAnonymously, error: authError } = useSupabaseAuth()
-  const { error: geoError, loading: geoLoading, getCurrentLocation, cancelLocationRequest } = useGeolocation()
-  const { portals, userPortal, createPortal, closePortal, connectionStatus, cancelPortalCreation } = usePortals(user)
+  const { error: geoError, getCurrentLocation } = useGeolocation()
+  const { portals, userPortal, createPortal, closePortal, connectionStatus } = usePortals(user)
   
   const [selectedPortal, setSelectedPortal] = useState(null)
   const [showChatPortal, setShowChatPortal] = useState(false)
@@ -90,45 +90,9 @@ export default function Map() {
     }
   }, [portals, userPortal, addDebugLog])
 
-  // ENHANCED: Cancel all operations when connection is lost
-  useEffect(() => {
-    if (connectionStatus === 'error' || connectionStatus === 'closed') {
-      addDebugLog('Connection lost - cancelling operations', 'warning')
-      if (isPlacingPin || geoLoading) {
-        handleCancelOperation()
-      }
-    }
-  }, [connectionStatus])
-
-  // ENHANCED: Handle operation cancellation
-  const handleCancelOperation = useCallback(() => {
-    addDebugLog('Cancelling all operations', 'info')
-    
-    // Cancel location request
-    if (geoLoading && cancelLocationRequest) {
-      cancelLocationRequest()
-      addDebugLog('Location request cancelled', 'info')
-    }
-    
-    // Cancel portal creation
-    if (isPlacingPin && cancelPortalCreation) {
-      cancelPortalCreation()
-      addDebugLog('Portal creation cancelled', 'info')
-    }
-    
-    setIsPlacingPin(false)
-    addToast('Operation cancelled', 'warning')
-  }, [geoLoading, isPlacingPin, cancelLocationRequest, cancelPortalCreation, addDebugLog, addToast])
-
   const handleCreatePortal = async () => {
     if (!user || isPlacingPin) {
       addToast('Please wait...', 'info')
-      return
-    }
-
-    // Check connection first
-    if (connectionStatus === 'error' || connectionStatus === 'closed') {
-      addToast('No connection - please check internet and try again', 'error')
       return
     }
 
@@ -139,21 +103,7 @@ export default function Map() {
     try {
       addDebugLog('Requesting GPS location...', 'info')
       const userLocation = await getCurrentLocation()
-      
-      // Check if operation was cancelled during location fetch
-      if (!isPlacingPin) {
-        addDebugLog('Operation was cancelled during location fetch', 'warning')
-        return
-      }
-      
       addDebugLog(`Location obtained: ${userLocation.latitude}, ${userLocation.longitude} (±${userLocation.accuracy}m)`, 'success')
-      
-      // Check connection again before creating portal
-      if (connectionStatus === 'error' || connectionStatus === 'closed') {
-        addToast('Connection lost during location fetch', 'error')
-        setIsPlacingPin(false)
-        return
-      }
       
       addDebugLog('Sending portal creation request...', 'info')
       const { data, error } = await createPortal(userLocation)
@@ -167,20 +117,14 @@ export default function Map() {
         
         // Auto-close after 5 minutes
         setTimeout(() => {
-          if (userPortal) {
-            handleClosePortal()
-            addToast('Portal closed automatically', 'info')
-          }
+          handleClosePortal()
+          addToast('Portal closed automatically', 'info')
         }, 300000)
       }
     } catch (err) {
       const errorMsg = err.message || err.toString()
       addDebugLog(`Exception during portal creation: ${errorMsg}`, 'error')
-      
-      // Don't show error if operation was cancelled
-      if (errorMsg !== 'Portal creation cancelled' && errorMsg !== 'Location request cancelled') {
-        addToast(geoError || errorMsg || 'Could not get location', 'error')
-      }
+      addToast(geoError || errorMsg || 'Could not get location', 'error')
     } finally {
       setIsPlacingPin(false)
       addDebugLog('Portal creation process completed', 'info')
@@ -205,23 +149,6 @@ export default function Map() {
     setShowChatPortal(true)
   }
 
-  // ENHANCED: Retry connection
-  const handleRetryConnection = useCallback(() => {
-    addDebugLog('Retrying connection...', 'info')
-    addToast('Retrying connection...', 'info')
-    
-    // Cancel any ongoing operations first
-    handleCancelOperation()
-    
-    // Attempt to reconnect
-    if (!user) {
-      signInAnonymously()
-    } else {
-      // Force a simple operation to test connection
-      window.location.reload()
-    }
-  }, [user, signInAnonymously, handleCancelOperation, addDebugLog, addToast])
-
   // Handle debug tab activation (long press on logo area)
   const [debugPressStart, setDebugPressStart] = useState(0)
   const handleDebugActivation = useCallback(() => {
@@ -238,17 +165,6 @@ export default function Map() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading Portal...</p>
-          
-          {/* Add cancel button for loading state */}
-          <button
-            onClick={() => {
-              addDebugLog('Loading cancelled by user', 'warning')
-              window.location.reload()
-            }}
-            className="mt-4 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-          >
-            Cancel & Reload
-          </button>
         </div>
       </div>
     )
@@ -261,7 +177,10 @@ export default function Map() {
       {/* Real-time Connection Status */}
       <ConnectionStatus 
         connectionStatus={connectionStatus}
-        onRetry={handleRetryConnection}
+        onRetry={() => {
+          addDebugLog('Manual connection retry triggered', 'info')
+          signInAnonymously()
+        }}
       />
 
       {/* Toasts */}
@@ -286,7 +205,7 @@ export default function Map() {
         </button>
       )}
 
-      {/* ENHANCED Debug Console - Better Positioned with Cancellation */}
+      {/* ALWAYS VISIBLE Debug Console - Better Positioned */}
       <motion.div
         initial={{ x: debugMinimized ? '85%' : 0 }}
         animate={{ x: debugMinimized ? '85%' : 0 }}
@@ -313,21 +232,19 @@ export default function Map() {
         
         {!debugMinimized && (
           <>
-            {/* Enhanced Status Section */}
+            {/* Compact Status Section */}
             <div className="p-2 border-b border-gray-600 text-xs">
               <div className="grid grid-cols-2 gap-1 text-xs">
                 <div>User: {user ? '✅' : '❌'}</div>
                 <div>Portal: {userPortal ? '🟢' : '⚪'}</div>
                 <div>Nearby: {portals.length}</div>
                 <div>Status: {connectionStatus === 'connected' ? '🟢' : '🔴'}</div>
-                <div>GPS: {geoLoading ? '🔄' : '⚪'}</div>
-                <div>Creating: {isPlacingPin ? '🔄' : '⚪'}</div>
               </div>
             </div>
 
-            {/* Enhanced Actions with Cancel */}
+            {/* Compact Actions */}
             <div className="p-2 border-b border-gray-600">
-              <div className="flex gap-1 mb-1">
+              <div className="flex gap-1">
                 <button
                   onClick={() => getCurrentLocation().then(loc => {
                     addDebugLog(`GPS: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)} ±${loc.accuracy}m`, 'success')
@@ -335,27 +252,19 @@ export default function Map() {
                     addDebugLog(`GPS failed: ${err.message}`, 'error')
                   })}
                   className="text-xs bg-green-600 px-2 py-1 rounded flex-1"
-                  disabled={geoLoading}
                 >
                   GPS
                 </button>
                 <button
-                  onClick={handleRetryConnection}
+                  onClick={() => {
+                    addDebugLog('Refreshing...', 'info')
+                    window.location.reload()
+                  }}
                   className="text-xs bg-blue-600 px-2 py-1 rounded flex-1"
                 >
-                  Retry
+                  Refresh
                 </button>
               </div>
-              
-              {/* ENHANCED: Cancel operations button */}
-              {(geoLoading || isPlacingPin) && (
-                <button
-                  onClick={handleCancelOperation}
-                  className="text-xs bg-red-600 px-2 py-1 rounded w-full mt-1"
-                >
-                  Cancel Operation
-                </button>
-              )}
             </div>
 
             {/* Compact Console Logs */}
@@ -459,49 +368,16 @@ export default function Map() {
         )}
       </AnimatePresence>
 
-      {/* ENHANCED: Loading overlay with cancel button and connection status */}
-      {(isPlacingPin || geoLoading) && (
+      {/* Loading overlay */}
+      {isPlacingPin && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/30 z-[2100]">
           <motion.div 
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-lg p-6 max-w-sm mx-4 shadow-xl"
+            className="bg-white rounded-lg p-6 flex items-center gap-3 shadow-xl"
           >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
-              <span className="font-medium">
-                {geoLoading ? 'Getting your location...' : 'Creating portal...'}
-              </span>
-            </div>
-            
-            {/* Connection status indicator */}
-            <div className="text-sm text-gray-600 mb-4">
-              Connection: <span className={`font-medium ${
-                connectionStatus === 'connected' ? 'text-green-600' :
-                connectionStatus === 'error' ? 'text-red-600' :
-                'text-yellow-600'
-              }`}>
-                {connectionStatus}
-              </span>
-            </div>
-            
-            {/* Cancel button */}
-            <button
-              onClick={handleCancelOperation}
-              className="w-full py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-            >
-              Cancel
-            </button>
-            
-            {/* Retry connection if needed */}
-            {(connectionStatus === 'error' || connectionStatus === 'closed') && (
-              <button
-                onClick={handleRetryConnection}
-                className="w-full mt-2 py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-              >
-                Retry Connection
-              </button>
-            )}
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
+            <span className="font-medium">Getting your location...</span>
           </motion.div>
         </div>
       )}
@@ -558,62 +434,38 @@ export default function Map() {
         onMouseUp={handleDebugActivation}
       />
 
-      {/* ENHANCED: Main action button with connection status and disabled states */}
-      <motion.div
+      {/* Main action button */}
+      <motion.button
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
-        className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[1600]"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 ${
+          userPortal 
+            ? 'bg-red-500 hover:bg-red-600' 
+            : 'bg-green-500 hover:bg-green-600'
+        } text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-semibold transition-colors z-[1600]`}
         style={{ marginBottom: 'max(env(safe-area-inset-bottom, 0px), 20px)' }}
+        onClick={userPortal ? handleClosePortal : handleCreatePortal}
+        disabled={isPlacingPin}
       >
-        {/* Connection warning banner */}
-        {(connectionStatus === 'error' || connectionStatus === 'closed') && (
-          <motion.div
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            className="mb-3 bg-red-500 text-white px-4 py-2 rounded-lg text-sm text-center"
-          >
-            No connection - check internet
-          </motion.div>
+        {isPlacingPin ? (
+          <>
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            <span>Locating...</span>
+          </>
+        ) : userPortal ? (
+          <>
+            <span className="text-xl">🔴</span>
+            <span>Close Portal</span>
+          </>
+        ) : (
+          <>
+            <span className="text-xl">🌀</span>
+            <span>Open Portal</span>
+          </>
         )}
-        
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className={`${
-            userPortal 
-              ? 'bg-red-500 hover:bg-red-600' 
-              : 'bg-green-500 hover:bg-green-600'
-          } text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-semibold transition-colors ${
-            (isPlacingPin || geoLoading || connectionStatus === 'error') 
-              ? 'opacity-50 cursor-not-allowed' 
-              : ''
-          }`}
-          onClick={userPortal ? handleClosePortal : handleCreatePortal}
-          disabled={isPlacingPin || geoLoading || connectionStatus === 'error'}
-        >
-          {isPlacingPin || geoLoading ? (
-            <>
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-              <span>{geoLoading ? 'Locating...' : 'Creating...'}</span>
-            </>
-          ) : userPortal ? (
-            <>
-              <span className="text-xl">🔴</span>
-              <span>Close Portal</span>
-            </>
-          ) : connectionStatus === 'error' || connectionStatus === 'closed' ? (
-            <>
-              <span className="text-xl">⚠️</span>
-              <span>No Connection</span>
-            </>
-          ) : (
-            <>
-              <span className="text-xl">🌀</span>
-              <span>Open Portal</span>
-            </>
-          )}
-        </motion.button>
-      </motion.div>
+      </motion.button>
     </div>
   )
 }

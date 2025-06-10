@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
 // Initialize Supabase
@@ -63,30 +63,11 @@ const ensureUserProfile = async (user) => {
   }
 }
 
-// Enhanced auth hook with proper loading state management
+// Clean OTP authentication hook using Edge Functions
 export const useSupabaseAuth = () => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const loadingTimeoutRef = useRef(null)
-
-  // Clear loading after timeout to prevent infinite loading
-  const setLoadingWithTimeout = useCallback((isLoading) => {
-    setLoading(isLoading)
-    
-    if (loadingTimeoutRef.current) {
-      clearTimeout(loadingTimeoutRef.current)
-    }
-    
-    if (isLoading) {
-      // Auto-clear loading after 30 seconds
-      loadingTimeoutRef.current = setTimeout(() => {
-        console.warn('Loading timeout reached, clearing loading state')
-        setLoading(false)
-        setError('Connection timeout - please check your internet and try again')
-      }, 30000)
-    }
-  }, [])
 
   useEffect(() => {
     if (!supabase) {
@@ -102,7 +83,7 @@ export const useSupabaseAuth = () => {
         setError(error.message)
       }
       setUser(session?.user ?? null)
-      setLoadingWithTimeout(false)
+      setLoading(false)
       
       // Ensure profile exists for existing session
       if (session?.user) {
@@ -115,7 +96,7 @@ export const useSupabaseAuth = () => {
       async (event, session) => {
         console.log('Auth event:', event)
         setUser(session?.user ?? null)
-        setLoadingWithTimeout(false)
+        setLoading(false)
         setError(null)
 
         // Create/update profile when user signs in
@@ -125,15 +106,10 @@ export const useSupabaseAuth = () => {
       }
     )
 
-    return () => {
-      subscription.unsubscribe()
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current)
-      }
-    }
-  }, [setLoadingWithTimeout])
+    return () => subscription.unsubscribe()
+  }, [])
 
-  // Anonymous sign-in with timeout
+  // Anonymous sign-in for development
   const signInAnonymously = async () => {
     if (!supabase) {
       setError('Supabase not configured')
@@ -141,7 +117,7 @@ export const useSupabaseAuth = () => {
     }
 
     try {
-      setLoadingWithTimeout(true)
+      setLoading(true)
       console.log('Attempting anonymous sign-in...')
       
       const { data, error } = await supabase.auth.signInAnonymously()
@@ -149,21 +125,22 @@ export const useSupabaseAuth = () => {
       if (error) {
         console.error('Anonymous sign-in failed:', error)
         setError(error.message)
-        setLoadingWithTimeout(false)
+        setLoading(false)
         return false
       }
 
       console.log('Anonymous sign-in successful')
+      // Profile will be created via onAuthStateChange
       return true
     } catch (err) {
       console.error('Anonymous sign-in error:', err)
       setError(err.message)
-      setLoadingWithTimeout(false)
+      setLoading(false)
       return false
     }
   }
 
-  // Enhanced OTP authentication with proper error handling
+  // Simple OTP authentication using Supabase's built-in system
   const authenticateWithCode = async (email, action, code = null) => {
     if (!supabase) {
       setError('Supabase not configured')
@@ -172,18 +149,19 @@ export const useSupabaseAuth = () => {
 
     try {
       if (action === 'verify') {
-        setLoadingWithTimeout(true)
+        setLoading(true)
       }
       setError(null)
 
       if (action === 'send') {
+        // Use Supabase's built-in OTP system
         console.log('Sending OTP via Supabase to:', email)
         
         const { error } = await supabase.auth.signInWithOtp({
           email,
           options: {
-            shouldCreateUser: true,
-            emailRedirectTo: undefined
+            shouldCreateUser: true, // Allow new user creation
+            emailRedirectTo: undefined // No redirect needed for PWA
           }
         })
 
@@ -197,6 +175,7 @@ export const useSupabaseAuth = () => {
         return true
 
       } else if (action === 'verify' && code) {
+        // Verify the OTP code using Supabase's verification
         console.log('Verifying OTP code:', code)
         
         const { data, error } = await supabase.auth.verifyOtp({
@@ -208,12 +187,12 @@ export const useSupabaseAuth = () => {
         if (error) {
           console.error('OTP verification failed:', error)
           setError('Invalid or expired code. Please try again.')
-          setLoadingWithTimeout(false)
+          setLoading(false)
           return false
         }
 
         console.log('OTP verified successfully, user authenticated')
-        setLoadingWithTimeout(false)
+        setLoading(false)
         return true
       }
 
@@ -221,7 +200,7 @@ export const useSupabaseAuth = () => {
       console.error('Auth error:', err)
       setError(err.message)
       if (action === 'verify') {
-        setLoadingWithTimeout(false)
+        setLoading(false)
       }
       return false
     }
@@ -243,31 +222,11 @@ export const useSupabaseAuth = () => {
   }
 }
 
-// Enhanced geolocation hook with cancellation support
+// GPS-only location hook
 export const useGeolocation = () => {
   const [location, setLocation] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
-  const watchIdRef = useRef(null)
-  const timeoutRef = useRef(null)
-
-  // Cancel any ongoing location request
-  const cancelLocationRequest = useCallback(() => {
-    console.log('Cancelling location request')
-    
-    if (watchIdRef.current) {
-      navigator.geolocation.clearWatch(watchIdRef.current)
-      watchIdRef.current = null
-    }
-    
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-      timeoutRef.current = null
-    }
-    
-    setLoading(false)
-    setError('Location request cancelled')
-  }, [])
 
   const getCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -276,144 +235,103 @@ export const useGeolocation = () => {
       return Promise.reject(new Error(errorMsg))
     }
 
-    // Cancel any existing request
-    cancelLocationRequest()
-    
     setLoading(true)
     setError(null)
 
     return new Promise((resolve, reject) => {
-      // Set timeout for location request
-      timeoutRef.current = setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         const errorMsg = 'GPS timeout - please try outdoors for better signal'
-        console.warn('GPS timeout reached')
         setError(errorMsg)
         setLoading(false)
         reject(new Error(errorMsg))
-      }, 20000)
-
-      const successCallback = (position) => {
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current)
-          timeoutRef.current = null
-        }
-        
-        // Validate coordinates
-        const lat = position.coords.latitude
-        const lng = position.coords.longitude
-        const acc = position.coords.accuracy
-
-        if (typeof lat !== 'number' || typeof lng !== 'number' || 
-            isNaN(lat) || isNaN(lng) || 
-            lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-          const errorMsg = 'Invalid GPS coordinates - please try again'
-          setError(errorMsg)
-          setLoading(false)
-          reject(new Error(errorMsg))
-          return
-        }
-
-        // Reject extremely inaccurate readings (>1km)
-        if (acc && acc > 1000) {
-          const errorMsg = 'GPS signal too weak - please try outdoors'
-          setError(errorMsg)
-          setLoading(false)
-          reject(new Error(errorMsg))
-          return
-        }
-
-        const newLocation = {
-          latitude: lat,
-          longitude: lng,
-          accuracy: typeof acc === 'number' && !isNaN(acc) ? Math.round(acc) : 100,
-          timestamp: Date.now()
-        }
-        
-        console.log('Valid GPS location:', newLocation)
-        setLocation(newLocation)
-        setLoading(false)
-        resolve(newLocation)
-      }
-
-      const errorCallback = (error) => {
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current)
-          timeoutRef.current = null
-        }
-        
-        let errorMessage = 'GPS unavailable'
-        
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = 'Location permission denied. Please allow location access and reload the page.'
-            break
-          case error.POSITION_UNAVAILABLE:
-            errorMessage = 'GPS unavailable. Please check location settings and try outdoors.'
-            break
-          case error.TIMEOUT:
-            errorMessage = 'GPS timeout. Try moving outdoors for better signal.'
-            break
-          default:
-            errorMessage = `GPS error: ${error.message || 'Please try again'}`
-        }
-        
-        console.error('GPS error:', error)
-        setError(errorMessage)
-        setLoading(false)
-        reject(new Error(errorMessage))
-      }
+      }, 20000) // Longer timeout for GPS
 
       navigator.geolocation.getCurrentPosition(
-        successCallback,
-        errorCallback,
+        (position) => {
+          clearTimeout(timeoutId)
+          
+          // CRITICAL: Validate all coordinate data
+          const lat = position.coords.latitude
+          const lng = position.coords.longitude
+          const acc = position.coords.accuracy
+
+          // Strict validation - reject invalid GPS data
+          if (typeof lat !== 'number' || typeof lng !== 'number' || 
+              isNaN(lat) || isNaN(lng) || 
+              lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            const errorMsg = 'Invalid GPS coordinates - please try again'
+            setError(errorMsg)
+            setLoading(false)
+            reject(new Error(errorMsg))
+            return
+          }
+
+          // Reject extremely inaccurate readings (>1km)
+          if (acc && acc > 1000) {
+            const errorMsg = 'GPS signal too weak - please try outdoors'
+            setError(errorMsg)
+            setLoading(false)
+            reject(new Error(errorMsg))
+            return
+          }
+
+          const newLocation = {
+            latitude: lat,
+            longitude: lng,
+            accuracy: typeof acc === 'number' && !isNaN(acc) ? Math.round(acc) : 100,
+            timestamp: Date.now()
+          }
+          
+          console.log('Valid GPS location:', newLocation)
+          setLocation(newLocation)
+          setLoading(false)
+          resolve(newLocation)
+        },
+        (error) => {
+          clearTimeout(timeoutId)
+          let errorMessage = 'GPS unavailable'
+          
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = 'Location permission denied. Please allow location access and reload the page.'
+              break
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = 'GPS unavailable. Please check location settings and try outdoors.'
+              break
+            case error.TIMEOUT:
+              errorMessage = 'GPS timeout. Try moving outdoors for better signal.'
+              break
+            default:
+              errorMessage = `GPS error: ${error.message || 'Please try again'}`
+          }
+          
+          console.error('GPS error:', error)
+          setError(errorMessage)
+          setLoading(false)
+          reject(new Error(errorMessage))
+        },
         {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 60000
+          enableHighAccuracy: true,  // Force GPS, not network location
+          timeout: 15000,            // 15 second timeout
+          maximumAge: 60000          // Cache for 1 minute max
         }
       )
     })
-  }, [cancelLocationRequest])
+  }, [])
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      cancelLocationRequest()
-    }
-  }, [cancelLocationRequest])
-
-  return { 
-    location, 
-    error, 
-    loading, 
-    getCurrentLocation, 
-    cancelLocationRequest 
-  }
+  return { location, error, loading, getCurrentLocation }
 }
 
-// Enhanced portal management with connection state handling
+// Optimized portal management hook with instant real-time updates
 export const usePortals = (user) => {
   const [portals, setPortals] = useState([])
   const [userPortal, setUserPortal] = useState(null)
   const [loading, setLoading] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState('connecting')
-  const [createPortalAbortController, setCreatePortalAbortController] = useState(null)
 
-  // Cancel portal creation
-  const cancelPortalCreation = useCallback(() => {
-    if (createPortalAbortController) {
-      createPortalAbortController.abort()
-      setCreatePortalAbortController(null)
-    }
-    setLoading(false)
-  }, [createPortalAbortController])
-
-  // Track connection health with proper error handling
+  // Track connection health
   useEffect(() => {
-    if (!supabase) {
-      setConnectionStatus('error')
-      return
-    }
+    if (!supabase) return
 
     const channel = supabase.channel('connection_status')
     
@@ -424,33 +342,15 @@ export const usePortals = (user) => {
         }
       })
       .subscribe((status) => {
+        setConnectionStatus(status)
         console.log('Real-time connection status:', status)
-        if (status === 'SUBSCRIBED') {
-          setConnectionStatus('connected')
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          setConnectionStatus('error')
-        } else if (status === 'CLOSED') {
-          setConnectionStatus('closed')
-        } else {
-          setConnectionStatus('connecting')
-        }
       })
 
-    // Connection timeout
-    const connectionTimeout = setTimeout(() => {
-      if (connectionStatus === 'connecting') {
-        console.warn('Connection timeout, setting to error state')
-        setConnectionStatus('error')
-      }
-    }, 10000)
-
     return () => {
-      clearTimeout(connectionTimeout)
       supabase.removeChannel(channel)
     }
-  }, [connectionStatus])
+  }, [])
 
-  // Load portals with error handling
   useEffect(() => {
     if (!user || !supabase) return
 
@@ -469,26 +369,20 @@ export const usePortals = (user) => {
 
         if (error) {
           console.error('Error loading portals:', error)
-          setConnectionStatus('error')
         } else {
           setPortals(data || [])
           const myPortal = data?.find(p => p.user_id === user.id)
           setUserPortal(myPortal || null)
-          if (connectionStatus !== 'connected') {
-            setConnectionStatus('connected')
-          }
         }
       } catch (err) {
         console.error('Portal loading failed:', err)
-        setConnectionStatus('error')
-      } finally {
-        setLoading(false)
       }
+      setLoading(false)
     }
 
     loadPortals()
 
-    // Enhanced real-time subscription with better error handling
+    // OPTIMIZED Real-time subscription with specific event handling
     const channel = supabase
       .channel('portals_realtime')
       .on(
@@ -497,33 +391,33 @@ export const usePortals = (user) => {
           event: 'INSERT', 
           schema: 'public', 
           table: 'portals',
-          filter: 'is_active=eq.true'
+          filter: 'is_active=eq.true' // Only active portals
         },
         async (payload) => {
           console.log('Portal created:', payload.new)
           
-          try {
-            const { data, error } = await supabase
-              .from('portals')
-              .select(`
-                *,
-                profiles:user_id (username, avatar_url)
-              `)
-              .eq('id', payload.new.id)
-              .single()
+          // Fetch complete portal data with profile
+          const { data, error } = await supabase
+            .from('portals')
+            .select(`
+              *,
+              profiles:user_id (username, avatar_url)
+            `)
+            .eq('id', payload.new.id)
+            .single()
 
-            if (data && !error) {
-              setPortals(prev => {
-                if (prev.find(p => p.id === data.id)) return prev
-                return [data, ...prev]
-              })
+          if (data && !error) {
+            // Add to portals list
+            setPortals(prev => {
+              // Avoid duplicates
+              if (prev.find(p => p.id === data.id)) return prev
+              return [data, ...prev]
+            })
 
-              if (data.user_id === user.id) {
-                setUserPortal(data)
-              }
+            // Update user portal if it's theirs
+            if (data.user_id === user.id) {
+              setUserPortal(data)
             }
-          } catch (err) {
-            console.error('Error fetching new portal:', err)
           }
         }
       )
@@ -536,7 +430,11 @@ export const usePortals = (user) => {
         },
         (payload) => {
           console.log('Portal deleted:', payload.old)
+          
+          // Remove from portals list
           setPortals(prev => prev.filter(p => p.id !== payload.old.id))
+          
+          // Clear user portal if it was theirs
           if (payload.old.user_id === user.id) {
             setUserPortal(null)
           }
@@ -552,27 +450,26 @@ export const usePortals = (user) => {
         async (payload) => {
           console.log('Portal updated:', payload.new)
           
-          try {
-            const { data, error } = await supabase
-              .from('portals')
-              .select(`
-                *,
-                profiles:user_id (username, avatar_url)
-              `)
-              .eq('id', payload.new.id)
-              .single()
+          // Fetch complete updated data
+          const { data, error } = await supabase
+            .from('portals')
+            .select(`
+              *,
+              profiles:user_id (username, avatar_url)
+            `)
+            .eq('id', payload.new.id)
+            .single()
 
-            if (data && !error) {
-              setPortals(prev => prev.map(p => 
-                p.id === data.id ? data : p
-              ))
+          if (data && !error) {
+            // Update in portals list
+            setPortals(prev => prev.map(p => 
+              p.id === data.id ? data : p
+            ))
 
-              if (data.user_id === user.id) {
-                setUserPortal(data)
-              }
+            // Update user portal if it's theirs
+            if (data.user_id === user.id) {
+              setUserPortal(data)
             }
-          } catch (err) {
-            console.error('Error fetching updated portal:', err)
           }
         }
       )
@@ -580,8 +477,9 @@ export const usePortals = (user) => {
         console.log('Portal subscription status:', status)
         if (status === 'SUBSCRIBED') {
           setConnectionStatus('connected')
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        } else if (status === 'CHANNEL_ERROR') {
           setConnectionStatus('error')
+          // Retry connection after 5 seconds
           setTimeout(loadPortals, 5000)
         }
       })
@@ -589,9 +487,9 @@ export const usePortals = (user) => {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [user, connectionStatus])
+  }, [user])
 
-  // Enhanced portal creation with cancellation support
+  // Optimistic portal creation
   const createPortal = async (location) => {
     if (!user || !supabase) {
       return { error: 'Not authenticated' }
@@ -608,11 +506,7 @@ export const usePortals = (user) => {
       return { error: 'Invalid location coordinates' }
     }
 
-    // Create abort controller for cancellation
-    const abortController = new AbortController()
-    setCreatePortalAbortController(abortController)
-
-    // Optimistic update
+    // Optimistic update - show portal immediately
     const optimisticPortal = {
       id: `temp_${Date.now()}`,
       user_id: user.id,
@@ -625,23 +519,15 @@ export const usePortals = (user) => {
       created_at: new Date().toISOString(),
       expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       profiles: { username: user.email || 'You', avatar_url: null },
-      _optimistic: true
+      _optimistic: true // Flag for styling
     }
 
     setUserPortal(optimisticPortal)
     setPortals(prev => [optimisticPortal, ...prev])
 
     try {
-      // Check if request was cancelled
-      if (abortController.signal.aborted) {
-        throw new Error('Portal creation cancelled')
-      }
-
+      // Ensure profile exists first
       await ensureUserProfile(user)
-
-      if (abortController.signal.aborted) {
-        throw new Error('Portal creation cancelled')
-      }
 
       const portalData = {
         user_id: user.id,
@@ -660,39 +546,30 @@ export const usePortals = (user) => {
         .select()
         .single()
 
-      if (abortController.signal.aborted) {
-        throw new Error('Portal creation cancelled')
-      }
-
       if (error) {
+        // Remove optimistic update on error
         setUserPortal(null)
         setPortals(prev => prev.filter(p => p.id !== optimisticPortal.id))
         return { error: error.message || 'Failed to create portal' }
       }
 
+      // Replace optimistic update with real data
       const realPortal = { ...data, profiles: optimisticPortal.profiles }
       setUserPortal(realPortal)
       setPortals(prev => prev.map(p => 
         p.id === optimisticPortal.id ? realPortal : p
       ))
 
-      setCreatePortalAbortController(null)
       return { data, error: null }
     } catch (err) {
-      if (err.message === 'Portal creation cancelled') {
-        console.log('Portal creation was cancelled')
-      } else {
-        console.error('Portal creation error:', err)
-      }
-      
+      // Remove optimistic update on error
       setUserPortal(null)
       setPortals(prev => prev.filter(p => p.id !== optimisticPortal.id))
-      setCreatePortalAbortController(null)
       return { error: err.message || 'Portal creation failed' }
     }
   }
 
-  // Portal deletion with proper cleanup
+  // Optimistic portal deletion
   const closePortal = async () => {
     if (!userPortal || !user || !supabase) {
       return { error: 'No portal to close' }
@@ -700,6 +577,7 @@ export const usePortals = (user) => {
 
     const portalToDelete = userPortal
 
+    // Optimistic update - hide portal immediately
     setUserPortal(null)
     setPortals(prev => prev.filter(p => p.id !== portalToDelete.id))
 
@@ -710,6 +588,7 @@ export const usePortals = (user) => {
         .eq('id', portalToDelete.id)
 
       if (error) {
+        // Restore portal on error
         setUserPortal(portalToDelete)
         setPortals(prev => [portalToDelete, ...prev])
         return { error: error.message }
@@ -717,6 +596,7 @@ export const usePortals = (user) => {
 
       return { error: null }
     } catch (err) {
+      // Restore portal on error
       setUserPortal(portalToDelete)
       setPortals(prev => [portalToDelete, ...prev])
       return { error: err.message }
@@ -729,8 +609,7 @@ export const usePortals = (user) => {
     loading,
     connectionStatus,
     createPortal,
-    closePortal,
-    cancelPortalCreation
+    closePortal
   }
 }
 
