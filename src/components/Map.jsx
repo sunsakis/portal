@@ -205,25 +205,25 @@ export default function Map() {
         </button>
       )}
 
-      {/* ALWAYS VISIBLE Debug Console - Top Right */}
+      {/* ALWAYS VISIBLE Debug Console - Better Positioned */}
       <motion.div
-        initial={{ x: debugMinimized ? '80%' : 0 }}
-        animate={{ x: debugMinimized ? '80%' : 0 }}
-        className="fixed top-0 right-0 w-80 h-1/2 bg-black/95 text-white z-[2000] flex flex-col"
+        initial={{ x: debugMinimized ? '85%' : 0 }}
+        animate={{ x: debugMinimized ? '85%' : 0 }}
+        className="fixed top-16 right-2 w-72 max-h-80 bg-black/90 text-white z-[2000] flex flex-col rounded-lg shadow-xl border border-gray-700"
       >
         {/* Debug Header */}
-        <div className="flex items-center justify-between p-2 bg-black border-b border-gray-700">
-          <h3 className="text-sm font-bold">🐛 Debug Console</h3>
+        <div className="flex items-center justify-between p-2 bg-black/80 border-b border-gray-600 rounded-t-lg">
+          <h3 className="text-xs font-bold">🐛 Debug</h3>
           <div className="flex gap-1">
             <button
               onClick={() => setDebugMinimized(!debugMinimized)}
-              className="text-white/60 hover:text-white text-xs px-2 py-1"
+              className="text-white/60 hover:text-white text-xs px-1 py-0.5 rounded"
             >
               {debugMinimized ? '◀' : '▶'}
             </button>
             <button
               onClick={() => setDebugInfo([])}
-              className="text-white/60 hover:text-white text-xs px-2 py-1"
+              className="text-white/60 hover:text-white text-xs px-1 py-0.5 rounded"
             >
               🗑
             </button>
@@ -232,34 +232,32 @@ export default function Map() {
         
         {!debugMinimized && (
           <>
-            {/* Status Section */}
-            <div className="p-2 border-b border-gray-700 text-xs">
-              <div className="grid grid-cols-2 gap-1">
-                <div>Env: {import.meta.env.DEV ? 'DEV' : 'PROD'}</div>
-                <div>Supabase: {import.meta.env.VITE_SUPABASE_URL ? '✅' : '❌'}</div>
-                <div>User: {user ? `✅ ${user.id.slice(0, 8)}...` : '❌'}</div>
+            {/* Compact Status Section */}
+            <div className="p-2 border-b border-gray-600 text-xs">
+              <div className="grid grid-cols-2 gap-1 text-xs">
+                <div>User: {user ? '✅' : '❌'}</div>
                 <div>Portal: {userPortal ? '🟢' : '⚪'}</div>
                 <div>Nearby: {portals.length}</div>
-                <div>Status: {connectionStatus}</div>
+                <div>Status: {connectionStatus === 'connected' ? '🟢' : '🔴'}</div>
               </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className="p-2 border-b border-gray-700">
+            {/* Compact Actions */}
+            <div className="p-2 border-b border-gray-600">
               <div className="flex gap-1">
                 <button
                   onClick={() => getCurrentLocation().then(loc => {
-                    addDebugLog(`GPS test: ${loc.latitude}, ${loc.longitude} ±${loc.accuracy}m`, 'success')
+                    addDebugLog(`GPS: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)} ±${loc.accuracy}m`, 'success')
                   }).catch(err => {
-                    addDebugLog(`GPS test failed: ${err.message}`, 'error')
+                    addDebugLog(`GPS failed: ${err.message}`, 'error')
                   })}
                   className="text-xs bg-green-600 px-2 py-1 rounded flex-1"
                 >
-                  Test GPS
+                  GPS
                 </button>
                 <button
                   onClick={() => {
-                    addDebugLog('Manual refresh triggered', 'info')
+                    addDebugLog('Refreshing...', 'info')
                     window.location.reload()
                   }}
                   className="text-xs bg-blue-600 px-2 py-1 rounded flex-1"
@@ -269,22 +267,21 @@ export default function Map() {
               </div>
             </div>
 
-            {/* Console Logs */}
-            <div className="flex-1 overflow-y-auto p-2">
+            {/* Compact Console Logs */}
+            <div className="flex-1 overflow-y-auto p-2 max-h-48">
               <div className="text-xs space-y-1">
                 {debugInfo.length === 0 ? (
-                  <div className="text-gray-400">Console ready...</div>
+                  <div className="text-gray-400">Ready...</div>
                 ) : (
-                  debugInfo.map((log, i) => (
+                  debugInfo.slice(-8).map((log, i) => (
                     <div key={i} className={`p-1 rounded text-xs ${
-                      log.type === 'error' ? 'bg-red-900/70 text-red-200' :
-                      log.type === 'success' ? 'bg-green-900/70 text-green-200' :
-                      log.type === 'warning' ? 'bg-yellow-900/70 text-yellow-200' :
-                      'bg-gray-800/70 text-gray-300'
+                      log.type === 'error' ? 'bg-red-900/50 text-red-200' :
+                      log.type === 'success' ? 'bg-green-900/50 text-green-200' :
+                      log.type === 'warning' ? 'bg-yellow-900/50 text-yellow-200' :
+                      'bg-gray-800/50 text-gray-300'
                     }`}>
-                      <span className="text-gray-400">{log.timestamp}</span>
-                      <br />
-                      {log.message}
+                      <span className="text-gray-400 text-xs">{log.timestamp}</span>
+                      <div className="text-xs">{log.message}</div>
                     </div>
                   ))
                 )}
