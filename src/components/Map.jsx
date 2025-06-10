@@ -1,218 +1,344 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { MapContainer, Marker, Popup, useMap, TileLayer } from 'react-leaflet'
-import { MaptilerLayer } from '@maptiler/leaflet-maptilersdk'
-import { useDrag } from '@use-gesture/react'
+import { MapContainer } from 'react-leaflet'
 import { motion, AnimatePresence } from 'framer-motion'
-import { io } from 'socket.io-client'
-import L from 'leaflet'
+
+import { useSupabaseAuth, useGeolocation, usePortals } from '../hooks/useSupabase'
+import { MapControls, MapEventHandler } from './MapControls'
+import { UserPortalMarker, OtherPortalsMarkers } from './MapMarkers'
+import ChatPortal from './ChatPortal'
+import Toast from './Toast'
+import MapLayers from './MapLayers'
+import ConnectionStatus from './ConnectionStatus'
+import PortalInstructions from './PortalInstructions'
 
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-defaulticon-compatibility'
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css'
 
-const socket = io(import.meta.env.VITE_SERVER_URL || 'http://localhost:3001')
-
-const MapControls = () => {
-  const map = useMap()
+export default function Map() {
+  const { user, loading: authLoading, signInAnonymously, error: authError } = useSupabaseAuth()
+  const { error: geoError, getCurrentLocation } = useGeolocation()
+  const { portals, userPortal, createPortal, closePortal, connectionStatus } = usePortals(user)
   
-  useEffect(() => {
-    map.doubleClickZoom.disable()
-    const zoomControl = L.control.zoom({ position: 'bottomright' })
-    map.addControl(zoomControl)
-    return () => map.removeControl(zoomControl)
-  }, [map])
+  const [selectedPortal, setSelectedPortal] = useState(null)
+  const [showChatPortal, setShowChatPortal] = useState(false)
+  const [toasts, setToasts] = useState([])
+  const [isPlacingPin, setIsPlacingPin] = useState(false)
   
-  return null
-}
+  // DEBUG TAB - Only visible in development or when enabled
+  const [showDebug, setShowDebug] = useState(false)
+  const [debugInfo, setDebugInfo] = useState([])
+  const isDev = import.meta.env.DEV || window.location.hostname === 'localhost'
 
-// Proper MapTiler integration using Leaflet plugin
-const MapTilerLayer = ({ apiKey, map }) => {
+  // Default location (Vilnius)
+  const defaultLocation = { latitude: 54.697325, longitude: 25.315356 }
+
+  // Debug logging function
+  const addDebugLog = useCallback((message, type = 'info') => {
+    if (!isDev && !showDebug) return // Only log in dev or when debug enabled
+    const timestamp = new Date().toLocaleTimeString()
+    setDebugInfo(prev => [...prev.slice(-10), { timestamp, message, type }])
+  }, [isDev, showDebug])
+
+  // Toast utilities
+  const addToast = useCallback((message, type = 'info') => {
+    const id = Date.now() + Math.random()
+    setToasts(prev => [...prev, { id, message, type }])
+    addDebugLog(`TOAST: ${message}`, type)
+  }, [addDebugLog])
+
+  const removeToast = useCallback((id) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id))
+  }, [])
+
+  // Auto sign-in anonymously
   useEffect(() => {
-    if (!apiKey || !map) return
+    if (!authLoading && !user) {
+      addDebugLog('Attempting anonymous sign-in...', 'info')
+      signInAnonymously()
+    }
+  }, [authLoading, user, signInAnonymously, addDebugLog])
+
+  const handleCreatePortal = async () => {
+    if (!user || isPlacingPin) {
+      addToast('Please wait...', 'info')
+      return
+    }
+
+    addDebugLog(`Creating portal for user: ${user.id}`, 'info')
+    setIsPlacingPin(true)
+    addToast('Getting your location...', 'info')
 
     try {
-      const mtLayer = new MaptilerLayer({
-        apiKey: apiKey,
-        style: 'streets-v2' // You can change this to other styles
-      })
+      const userLocation = await getCurrentLocation()
+      addDebugLog(`Location: ${userLocation.latitude}, ${userLocation.longitude} (±${userLocation.accuracy}m)`, 'success')
       
-      mtLayer.addTo(map)
-      
-      // Handle ready event
-      mtLayer.on('ready', () => {
-        console.log('MapTiler layer loaded successfully!')
-      })
-      
-      return () => {
-        if (map.hasLayer(mtLayer)) {
-          map.removeLayer(mtLayer)
-        }
+      const { data, error } = await createPortal(userLocation)
+
+      if (error) {
+        addDebugLog(`Portal creation error: ${error}`, 'error')
+        addToast(`Failed to create portal: ${error}`, 'error')
+      } else {
+        addDebugLog(`Portal created successfully: ${data?.id}`, 'success')
+        addToast(`Portal opened! (±${Math.round(userLocation.accuracy)}m)`, 'success')
+        
+        // Auto-close after 5 minutes
+        setTimeout(() => {
+          handleClosePortal()
+          addToast('Portal closed automatically', 'info')
+        }, 300000)
       }
-    } catch (error) {
-      console.log('MapTiler layer failed to load:', error)
+    } catch (err) {
+      const errorMsg = err.message || err.toString()
+      addDebugLog(`Exception: ${errorMsg}`, 'error')
+      addToast(geoError || errorMsg || 'Could not get location', 'error')
+    } finally {
+      setIsPlacingPin(false)
     }
-  }, [apiKey, map])
+  }
 
-  return null
-}
+  const handleClosePortal = async () => {
+    const { error } = await closePortal()
+    if (error) {
+      addToast('Failed to close portal', 'error')
+    } else {
+      addToast('Portal closed', 'info')
+    }
+  }
 
-// Enhanced map layers with better fallback
-const MapLayers = ({ maptilerApiKey }) => {
-  const map = useMap()
-  const [useOSM, setUseOSM] = useState(false)
+  const handlePortalClick = (portal) => {
+    setSelectedPortal(portal)
+    setShowChatPortal(true)
+  }
 
-  // If no API key or we decided to use OSM, show OpenStreetMap
-  if (!maptilerApiKey || useOSM) {
+  // Handle debug tab activation (long press on logo area)
+  const [debugPressStart, setDebugPressStart] = useState(0)
+  const handleDebugActivation = useCallback(() => {
+    const pressTime = Date.now() - debugPressStart
+    if (pressTime > 2000) { // 2 second long press
+      setShowDebug(!showDebug)
+      addToast(showDebug ? 'Debug disabled' : 'Debug enabled', 'info')
+    }
+  }, [debugPressStart, showDebug, addToast])
+
+  if (authLoading) {
     return (
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        maxZoom={19}
-      />
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading Portal...</p>
+        </div>
+      </div>
     )
   }
 
-  return (
-    <>
-      <MapTilerLayer apiKey={maptilerApiKey} map={map} />
-      {/* Fallback to OSM if MapTiler fails */}
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        maxZoom={19}
-        eventHandlers={{
-          tileerror: () => {
-            console.log('Falling back to OpenStreetMap')
-            setUseOSM(true)
-          }
-        }}
-      />
-    </>
-  )
-}
-
-const BottomSheet = ({ isOpen, onClose, children }) => {
-  const bind = useDrag(
-    ({ last, velocity: [, vy], direction: [, dy], movement: [, my] }) => {
-      if (last && (my > 100 || (vy > 0.5 && dy > 0))) {
-        onClose()
-      }
-    },
-    { from: () => [0, 0], filterTaps: true, bounds: { top: 0 }, rubberband: true }
-  )
-
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 0.5 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black z-40"
-            onClick={onClose}
-          />
-          <motion.div
-            {...bind()}
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-50 touch-none"
-            style={{ maxHeight: '70vh' }}
-          >
-            <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-4" />
-            <div className="px-4 pb-8 overflow-y-auto max-h-full">
-              {children}
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
-  )
-}
-
-export default function Map() {
-  const user_id = 'user_id'
-  const [showBottomSheet, setShowBottomSheet] = useState(false)
-  const [selectedMarker, setSelectedMarker] = useState(null)
-  
-  // Default to Vilnius coordinates
-  const defaultLocation = { latitude: 54.697325, longitude: 25.315356 }
-  
-  const [markers, setMarkers] = useState({
-    [user_id]: { 
-      ...defaultLocation,
-      live_period: null,
-      quest: '',
-      name: ''
-    }
-  })
-
-  useEffect(() => {
-    socket.on("receive_location", (data) => {
-      const { latitude, longitude, live_period, user_id, quest, name } = data
-      setMarkers(prevMarkers => ({ 
-        ...prevMarkers,
-        [user_id]: { latitude, longitude, live_period, quest, name }
-      }))
-    })
-
-    return () => socket.off("receive_location")
-  }, [])
-
-  const handleMarkerClick = useCallback((marker, userId) => {
-    setSelectedMarker({ ...marker, userId })
-    setShowBottomSheet(true)
-  }, [])
-
-  // Use default location as center
   const centerPosition = [defaultLocation.latitude, defaultLocation.longitude]
 
   return (
     <div className="relative h-screen w-full overflow-hidden">
+      {/* Real-time Connection Status */}
+      <ConnectionStatus 
+        connectionStatus={connectionStatus}
+        onRetry={() => {
+          addDebugLog('Manual connection retry', 'info')
+          signInAnonymously()
+        }}
+      />
+
+      {/* Toasts */}
+      <AnimatePresence>
+        {toasts.map(toast => (
+          <Toast
+            key={toast.id}
+            message={toast.message}
+            type={toast.type}
+            onClose={() => removeToast(toast.id)}
+          />
+        ))}
+      </AnimatePresence>
+
+      {/* Debug Toggle - Hidden until activated */}
+      {(isDev || showDebug) && (
+        <button
+          onClick={() => setShowDebug(!showDebug)}
+          className="fixed top-4 right-4 bg-black/80 text-white p-2 rounded-full text-xs z-[2001] w-10 h-10 flex items-center justify-center"
+        >
+          🐛
+        </button>
+      )}
+
+      {/* Debug Panel - Production Safe */}
+      <AnimatePresence>
+        {showDebug && (
+          <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            className="fixed top-0 right-0 w-80 h-full bg-black/95 text-white p-4 z-[2000] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">Debug Console</h3>
+              <button
+                onClick={() => setShowDebug(false)}
+                className="text-white/60 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold mb-2">Status:</h4>
+              <div className="text-xs space-y-1">
+                <div>Environment: {isDev ? 'DEV' : 'PROD'}</div>
+                <div>Supabase: {import.meta.env.VITE_SUPABASE_URL ? '✅' : '❌'}</div>
+                <div>User: {user ? `✅ ${user.id.slice(0, 8)}...` : '❌'}</div>
+                <div>Portal: {userPortal ? '🟢 Active' : '⚪ Inactive'}</div>
+                <div>Portals nearby: {portals.length}</div>
+                <div>Connection: {connectionStatus}</div>
+                <div>Real-time: {connectionStatus === 'connected' ? '✅' : '❌'}</div>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold mb-2">Actions:</h4>
+              <div className="space-y-2">
+                <button
+                  onClick={() => getCurrentLocation().then(loc => {
+                    addDebugLog(`Test location: ${loc.latitude}, ${loc.longitude}`, 'success')
+                  }).catch(err => {
+                    addDebugLog(`Location error: ${err.message}`, 'error')
+                  })}
+                  className="block w-full text-xs bg-green-600 p-2 rounded"
+                >
+                  Test GPS
+                </button>
+                <button
+                  onClick={() => setDebugInfo([])}
+                  className="block w-full text-xs bg-red-600 p-2 rounded"
+                >
+                  Clear Logs
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Console:</h4>
+              <div className="text-xs space-y-1 max-h-96 overflow-y-auto">
+                {debugInfo.length === 0 ? (
+                  <div className="text-gray-400">No logs...</div>
+                ) : (
+                  debugInfo.map((log, i) => (
+                    <div key={i} className={`p-1 rounded ${
+                      log.type === 'error' ? 'bg-red-900/50' :
+                      log.type === 'success' ? 'bg-green-900/50' :
+                      log.type === 'warning' ? 'bg-yellow-900/50' :
+                      'bg-gray-800/50'
+                    }`}>
+                      <span className="text-gray-400">{log.timestamp}</span> {log.message}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Loading overlay */}
+      {isPlacingPin && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/30 z-[2100]">
+          <motion.div 
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-lg p-6 flex items-center gap-3 shadow-xl"
+          >
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
+            <span className="font-medium">Getting your location...</span>
+          </motion.div>
+        </div>
+      )}
+
       <MapContainer
         center={centerPosition}
         zoom={13}
         style={{ height: "100%", width: "100%" }}
         zoomControl={false}
         attributionControl={true}
+        doubleClickZoom={true}
+        scrollWheelZoom={true}
+        dragging={true}
+        touchZoom={true}
+        boxZoom={true}
+        keyboard={true}
       >
         <MapLayers maptilerApiKey={import.meta.env.VITE_MAPTILER_API} />
         <MapControls />
+        <MapEventHandler />
         
-        {Object.entries(markers).map(([userId, marker]) => {
-          const { latitude, longitude, live_period, quest, name } = marker
-          return live_period && (
-            <Marker 
-              key={userId} 
-              position={[latitude, longitude]}
-              eventHandlers={{
-                click: () => handleMarkerClick(marker, userId)
-              }}
-            >
-              <Popup>
-                <div className="p-2">
-                  <strong className="block text-sm">{name}</strong>
-                  <span className="text-xs text-gray-600">{quest}</span>
-                </div>
-              </Popup>
-            </Marker>
-          )
-        })}
+        <UserPortalMarker 
+          portal={userPortal} 
+          onPortalClick={handlePortalClick} 
+        />
+        
+        <OtherPortalsMarkers 
+          portals={portals}
+          userId={user?.id}
+          onPortalClick={handlePortalClick}
+        />
       </MapContainer>
 
-      <BottomSheet isOpen={showBottomSheet} onClose={() => setShowBottomSheet(false)}>
-        {selectedMarker && (
-          <div className="p-4">
-            <h3 className="text-lg font-semibold mb-2">{selectedMarker.name}</h3>
-            <p className="text-gray-600 mb-4">{selectedMarker.quest}</p>
-            <button className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600">
-              Start Chat
-            </button>
-          </div>
+      {/* Chat Portal Interface */}
+      <ChatPortal
+        isOpen={showChatPortal}
+        onClose={() => setShowChatPortal(false)}
+        portal={selectedPortal}
+        user={user}
+      />
+
+      {/* Portal Instructions for new users */}
+      <PortalInstructions userPortal={userPortal} />
+
+      {/* Hidden debug activation area - Long press app title area */}
+      <div 
+        className="fixed top-4 left-4 w-20 h-10 z-[1500]"
+        onTouchStart={() => setDebugPressStart(Date.now())}
+        onTouchEnd={handleDebugActivation}
+        onMouseDown={() => setDebugPressStart(Date.now())}
+        onMouseUp={handleDebugActivation}
+      />
+
+      {/* Main action button */}
+      <motion.button
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 ${
+          userPortal 
+            ? 'bg-red-500 hover:bg-red-600' 
+            : 'bg-green-500 hover:bg-green-600'
+        } text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-semibold transition-colors z-[1600]`}
+        style={{ marginBottom: 'max(env(safe-area-inset-bottom, 0px), 20px)' }}
+        onClick={userPortal ? handleClosePortal : handleCreatePortal}
+        disabled={isPlacingPin}
+      >
+        {isPlacingPin ? (
+          <>
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            <span>Locating...</span>
+          </>
+        ) : userPortal ? (
+          <>
+            <span className="text-xl">🔴</span>
+            <span>Close Portal</span>
+          </>
+        ) : (
+          <>
+            <span className="text-xl">🌀</span>
+            <span>Open Portal</span>
+          </>
         )}
-      </BottomSheet>
+      </motion.button>
     </div>
   )
 }

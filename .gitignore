@@ -45,3 +45,5 @@ node_modules/
 bot/bot.log
 .log
 bot.log
+
+/dist

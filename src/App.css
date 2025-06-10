@@ -21,9 +21,18 @@ body {
 }
 
 .leaflet-container {
-  touch-action: pan-x pan-y;
+  /* OPTIMIZED: Smooth navigation like Google Maps */
+  touch-action: manipulation;
   height: 100vh;
   width: 100vw;
+  /* Prevent text selection during navigation */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  /* Smooth rendering */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 
 .leaflet-popup-content {
@@ -45,8 +54,217 @@ body {
   margin: 2px !important;
 }
 
+/* Portal marker styles */
+.portal-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.portal-wrapper {
+  position: relative;
+  width: 30px;
+  height: 30px;
+}
+
+.portal-icon {
+  width: 30px;
+  height: 30px;
+  background: white;
+  border: 2px solid #3b82f6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  cursor: pointer;
+  /* Better touch target for mobile */
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.portal-pulse {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  width: 50px;
+  height: 50px;
+  background: rgba(59, 130, 246, 0.2);
+  border-radius: 50%;
+  animation: portalPulse 2s infinite;
+  z-index: 1;
+}
+
+/* User location marker styles */
+.user-location-marker {
+  background: transparent !important;
+  border: none !important;
+  z-index: 1000 !important;
+}
+
+.user-location-wrapper {
+  position: relative;
+  width: 24px;
+  height: 24px;
+}
+
+.user-location-dot {
+  width: 24px;
+  height: 24px;
+  background: #29f205;
+  border: 3px solid white;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1002;
+}
+
+.user-location-pulse {
+  position: absolute;
+  top: -15px;
+  left: -15px;
+  width: 54px;
+  height: 54px;
+  background: rgba(148, 248, 54, 0.2);
+  border-radius: 50%;
+  animation: userLocationPulse 2s infinite;
+  z-index: 1001;
+}
+
+@keyframes portalPulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes userLocationPulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* Mobile-specific enhancements */
+@media (max-width: 768px) {
+  .leaflet-control-zoom a {
+    width: 44px !important;
+    height: 44px !important;
+    line-height: 42px !important;
+    font-size: 20px !important;
+  }
+  
+  .leaflet-popup-content {
+    font-size: 16px;
+    min-width: 200px;
+  }
+  
+  .leaflet-popup-close-button {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 20px !important;
+  }
+  
+  /* IMPROVED: Better portal touch targets on mobile */
+  .portal-icon {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    margin: -7px; /* Center the larger touch target */
+  }
+}
+
+/* Touch improvements for mobile - Standard map behavior */
+@media (hover: none) and (pointer: coarse) {
+  .leaflet-container {
+    /* Standard touch actions for maps */
+    touch-action: manipulation;
+    /* Fast tapping for mobile */
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  .leaflet-marker-icon {
+    cursor: pointer;
+    /* Ensure touch targets are accessible */
+    min-width: 44px;
+    min-height: 44px;
+  }
+  
+  /* Smooth interactions */
+  .leaflet-container * {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    /* Hardware acceleration for smooth panning */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+  
+  /* Improve gesture recognition */
+  .leaflet-control-container {
+    pointer-events: auto;
+  }
+  
+  .leaflet-control-container * {
+    -webkit-touch-callout: none;
+  }
+}
+
 @media (display-mode: standalone) {
   body {
     padding-top: max(env(safe-area-inset-top), 20px);
   }
+}
+
+/* OPTIMIZED: Smooth map navigation and performance */
+@media (pointer: coarse) {
+  .leaflet-container {
+    /* Perfect touch responsiveness */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    /* Smooth rendering */
+    will-change: transform;
+  }
+  
+  /* Fast, responsive controls */
+  .leaflet-control-zoom a {
+    transition: all 0.1s ease;
+  }
+  
+  .leaflet-control-zoom a:active {
+    transform: scale(0.95);
+  }
+}
+
+/* Custom scrollbar for bottom sheet */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 4px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 2px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 2px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
