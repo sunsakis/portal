@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { MapContainer } from 'react-leaflet'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -15,7 +15,7 @@ import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility
 
 export default function Map() {
   const { user, signInAnonymously } = useSupabaseAuth()
-  const { error: geoError, getCurrentLocation } = useGeolocation()
+  const { error: geoError, getCurrentLocation, location: userLocation } = useGeolocation()
   const { portals, userPortal, createPortal, closePortal, connectionStatus } = usePortals(user)
   
   const [selectedPortal, setSelectedPortal] = useState(null)
@@ -26,8 +26,68 @@ export default function Map() {
   const [debugInfo, setDebugInfo] = useState([])
   const [debugMinimized, setDebugMinimized] = useState(false)
 
-  // Default location (Vilnius) - Privacy-friendly fallback
-  const defaultLocation = { latitude: 54.697325, longitude: 25.315356 }
+  // Default fallback location (Berlin Prenzlauer Berg) - Privacy-friendly
+  const berlinPrenzlauerBerg = { latitude: 52.5396, longitude: 13.4127 }
+
+  // Calculate distance between two coordinates (Haversine formula)
+  const calculateDistance = useCallback((lat1, lon1, lat2, lon2) => {
+    const R = 6371 // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180
+    const dLon = (lon2 - lon1) * Math.PI / 180
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+    return R * c // Distance in kilometers
+  }, [])
+
+  // Find the closest portal to user's location or Berlin if no user location
+  const closestPortal = useMemo(() => {
+    if (!portals || portals.length === 0) return null
+
+    const referenceLocation = userLocation || berlinPrenzlauerBerg
+    
+    let closest = portals[0]
+    let minDistance = calculateDistance(
+      referenceLocation.latitude, 
+      referenceLocation.longitude,
+      closest.latitude, 
+      closest.longitude
+    )
+
+    for (let i = 1; i < portals.length; i++) {
+      const distance = calculateDistance(
+        referenceLocation.latitude, 
+        referenceLocation.longitude,
+        portals[i].latitude, 
+        portals[i].longitude
+      )
+      
+      if (distance < minDistance) {
+        minDistance = distance
+        closest = portals[i]
+      }
+    }
+
+    return { portal: closest, distance: minDistance }
+  }, [portals, userLocation, calculateDistance, berlinPrenzlauerBerg])
+
+  // Dynamic map center: user location > closest portal > Berlin Prenzlauer Berg
+  const mapCenter = useMemo(() => {
+    // Priority 1: User's actual location (most private and relevant)
+    if (userLocation) {
+      return [userLocation.latitude, userLocation.longitude]
+    }
+    
+    // Priority 2: Closest portal location (shows activity)
+    if (closestPortal?.portal) {
+      return [closestPortal.portal.latitude, closestPortal.portal.longitude]
+    }
+    
+    // Priority 3: Berlin Prenzlauer Berg fallback
+    return [berlinPrenzlauerBerg.latitude, berlinPrenzlauerBerg.longitude]
+  }, [userLocation, closestPortal, berlinPrenzlauerBerg])
 
   // Debug logging - ALWAYS ACTIVE for mobile testing
   const addDebugLog = useCallback((message, type = 'info') => {
@@ -51,6 +111,14 @@ export default function Map() {
     addDebugLog('Privacy mode: Anonymous authentication', 'success')
   }, [addDebugLog])
 
+  // Log map center changes
+  useEffect(() => {
+    const centerType = userLocation ? 'User GPS' : 
+                      closestPortal ? `Closest Portal (${closestPortal.distance.toFixed(1)}km away)` : 
+                      'Berlin Prenzlauer Berg'
+    addDebugLog(`Map center: ${centerType} [${mapCenter[0].toFixed(4)}, ${mapCenter[1].toFixed(4)}]`, 'info')
+  }, [mapCenter, userLocation, closestPortal, addDebugLog])
+
   // Log connection status changes
   useEffect(() => {
     addDebugLog(`Connection: ${connectionStatus}`, connectionStatus === 'connected' ? 'success' : 'warning')
@@ -62,7 +130,10 @@ export default function Map() {
     if (userPortal) {
       addDebugLog(`User portal active`, 'success')
     }
-  }, [portals, userPortal, addDebugLog])
+    if (closestPortal) {
+      addDebugLog(`Closest portal: ${closestPortal.distance.toFixed(1)}km away`, 'info')
+    }
+  }, [portals, userPortal, closestPortal, addDebugLog])
 
   const handleCreatePortal = async () => {
     if (!user || isPlacingPin) return
@@ -72,21 +143,15 @@ export default function Map() {
 
     try {
       addDebugLog('Requesting GPS location...', 'info')
-      const userLocation = await getCurrentLocation()
-      addDebugLog(`Location: ${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)} (±${userLocation.accuracy}m)`, 'success')
+      const location = await getCurrentLocation()
+      addDebugLog(`Location: ${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)} (±${location.accuracy}m)`, 'success')
       
-      const { data, error } = await createPortal(userLocation)
+      const { data, error } = await createPortal(location)
 
       if (error) {
         addDebugLog(`Portal creation failed: ${error}`, 'error')
       } else {
         addDebugLog('Portal created successfully', 'success')
-        
-        // Auto-close after 5 minutes for privacy
-        setTimeout(() => {
-          handleClosePortal()
-          addDebugLog('Portal auto-closed for privacy', 'info')
-        }, 300000)
       }
     } catch (err) {
       const errorMsg = err.message || err.toString()
@@ -111,8 +176,6 @@ export default function Map() {
     setSelectedPortal(portal)
     setShowChatPortal(true)
   }
-
-  const centerPosition = [defaultLocation.latitude, defaultLocation.longitude]
 
   return (
     <div className="relative h-screen w-full overflow-hidden">
@@ -158,7 +221,10 @@ export default function Map() {
                 <div>User: {user ? '✅' : '❌'}</div>
                 <div>Portal: {userPortal ? '🟢' : '⚪'}</div>
                 <div>Nearby: {portals.length}</div>
-                <div>GPS: {connectionStatus === 'connected' ? '🟢' : '🔴'}</div>
+                <div>GPS: {userLocation ? '🟢' : '🔴'}</div>
+              </div>
+              <div className="mt-1 text-xs text-gray-300">
+                Center: {userLocation ? 'GPS' : closestPortal ? 'Portal' : 'Berlin'}
               </div>
             </div>
 
@@ -232,9 +298,10 @@ export default function Map() {
         )}
       </AnimatePresence>
 
-      {/* Map Container */}
+      {/* Map Container with Dynamic Center */}
       <MapContainer
-        center={centerPosition}
+        key={`${mapCenter[0]}-${mapCenter[1]}`} // Force re-render when center changes
+        center={mapCenter}
         zoom={13}
         style={{ height: "100%", width: "100%" }}
         zoomControl={false}
