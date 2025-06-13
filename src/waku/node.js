@@ -1,4 +1,4 @@
-import { createLightNode } from '@waku/sdk';
+import { createLightNode, Protocols, waitForRemotePeer } from '@waku/sdk';
 import { createDecoder, createEncoder } from '@waku/sdk';
 import protobuf from 'protobufjs';
 
@@ -35,8 +35,8 @@ export const createWakuNode = async () => {
       peerExchange: true,
       localPeerCache: false,
     },
-    numPeersToUse: 2,
     autoStart: true,
+    numPeersToUse: 2,
   });
 
   await Promise.allSettled([
@@ -48,9 +48,28 @@ export const createWakuNode = async () => {
     ),
   ]);
 
+  // await waitForRemotePeer(node, [
+  //   Protocols.Filter,
+  //   Protocols.LightPush,
+  //   Protocols.Store,
+  // ]);
+
   console.log(node);
   wakuNode = node;
   console.log('Waku Light node started ....');
+
+  let messages = [];
+  const promises = wakuNode.store.queryGenerator([portal_list_decoder]);
+
+  for await (const promise of promises) {
+    const messagesRaw = await Promise.all(promise);
+    const filteredMessages = messagesRaw.filter(
+      (v) => !!v,
+    );
+
+    messages = [...messages, ...filteredMessages];
+  }
+  console.log('OLD', messages);
 
   waku_SubToPortals();
   console.log('Waku sub started ....');
