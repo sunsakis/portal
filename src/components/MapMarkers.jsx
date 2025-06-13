@@ -242,29 +242,6 @@ export const UserPortalMarker = ({ portal, onPortalClick }) => {
         click: handleClick
       }}
     >
-      <Popup>
-        <div className="p-2">
-          <strong className="block text-sm text-green-600 mb-1">Your Chat Portal</strong>
-          <div className="text-xs text-gray-600 space-y-1">
-            <div>Range: ~50m radius</div>
-            <div>Accuracy: ±{Math.round(portal.accuracy || 0)}m</div>
-            <div>Active since: {new Date(portal.created_at).toLocaleTimeString()}</div>
-            <div className="text-xs text-gray-500 mt-1">
-              Zoom: {zoom.toFixed(1)} • Scale: {(getMarkerSizeForZoom(zoom) / 30).toFixed(2)}x
-            </div>
-            <button 
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                onPortalClick(portal)
-              }}
-              className="mt-2 bg-green-500 text-white px-3 py-1 rounded text-xs hover:bg-green-600 transition-colors"
-            >
-              Open Chat
-            </button>
-          </div>
-        </div>
-      </Popup>
     </Marker>
   )
 }

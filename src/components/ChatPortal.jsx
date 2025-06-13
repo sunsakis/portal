@@ -107,29 +107,6 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
               paddingBottom: 'env(safe-area-inset-bottom, 20px)'
             }}
           >
-            {/* Header */}
-            <div className="flex-shrink-0 p-4 border-b border-gray-200">
-              <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-4" />
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    🧌 {portal?.title || 'Portal Chat'}
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {portal?.description || 'Chat with people at this location'}
-                  </p>
-                  <p className="text-xs text-green-600 mt-1">
-                    Local mode - messages stored on device
-                  </p>
-                </div>
-                <button
-                  onClick={onClose}
-                  className="p-2 hover:bg-gray-100 rounded-full"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
 
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">

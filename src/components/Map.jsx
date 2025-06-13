@@ -435,7 +435,6 @@ export default function Map() {
           </>
         ) : userPortal ? (
           <>
-            <span className="text-xl">🔴</span>
             <span>Close Portal</span>
           </>
         ) : (
