@@ -2,7 +2,7 @@ import { createLightNode } from '@waku/sdk';
 import { createDecoder, createEncoder } from '@waku/sdk';
 import protobuf from 'protobufjs';
 
-export let wakuNode = null;
+export let wakuNode;
 
 export const TOPIC_PORTALS_LIST = '/TOPIC_PORTALS_LIST/1/message/proto';
 const portal_list_encoder = createEncoder({ contentTopic: TOPIC_PORTALS_LIST });
@@ -18,19 +18,27 @@ const PortalListDataPacket = new protobuf.Type('PortalListDataPacket')
   );
 
 export const createWakuNode = async () => {
-  console.log('Waku Light node started ....');
   const node = await createLightNode({
     defaultBootstrap: true,
-    networkConfig: {
-      clusterId: 1,
-      contentTopics: [TOPIC_PORTALS_LIST],
-    },
+    pubsubTopics: ['/waku/2/rs/1/4'],
+    contentTopics: [TOPIC_PORTALS_LIST],
   });
   wakuNode = node;
   await node.start();
-  await waku_SubToPortals();
-  await waku_OpenPortal();
-  console.log(portalList);
+  console.log('Waku Light node started ....');
+
+  waku_SubToPortals();
+  console.log('Waku sub started ....');
+
+  setInterval(async () => {
+    try {
+      await waku_OpenPortal();
+      console.log('Waku portal opened ....');
+      console.log(portalList);
+    } catch (e) {
+      console.error(e);
+    }
+  }, 3000);
 };
 
 const waku_OpenPortal = async () => {
@@ -45,13 +53,19 @@ const waku_OpenPortal = async () => {
   const serialisedMessage = PortalListDataPacket.encode(protoMessage).finish();
 
   // Send the message using Light Push
-  await wakuNode.lightPush.send(portal_list_encoder, {
-    payload: serialisedMessage,
-  });
+  try {
+    await wakuNode.lightPush.send(portal_list_encoder, {
+      payload: serialisedMessage,
+    });
+  } catch (e) {
+    console.error(e);
+  }
 };
 
 const waku_SubToPortals = async () => {
   const callback = (wakuMessage) => {
+    console.log('waku msh', wakuMessage);
+
     // Check if there is a payload on the message
     if (!wakuMessage.payload) return;
     // Render the messageObj as desired in your application
@@ -63,9 +77,17 @@ const waku_SubToPortals = async () => {
   const { error, subscription } = await wakuNode.filter.createSubscription({
     contentTopics: [TOPIC_PORTALS_LIST],
   });
+
   if (error) {
-    console.error(error);
+    console.error('WAKU ERR:', error);
+  } else {
+    console.log('SUB', subscription);
   }
-  // Subscribe to content topics and process new messages
-  await subscription.subscribe([portal_list_decoder], callback);
+
+  try {
+    // Subscribe to content topics and process new messages
+    await subscription.subscribe([portal_list_decoder], callback);
+  } catch (e) {
+    console.error('WAKU ', e);
+  }
 };
