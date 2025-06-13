@@ -5,8 +5,14 @@ import protobuf from 'protobufjs';
 export let wakuNode;
 
 export const TOPIC_PORTALS_LIST = '/TOPIC_PORTALS_LIST/1/message/proto';
-const portal_list_encoder = createEncoder({ contentTopic: TOPIC_PORTALS_LIST });
-const portal_list_decoder = createDecoder(TOPIC_PORTALS_LIST);
+const portal_list_encoder = createEncoder({
+  contentTopic: TOPIC_PORTALS_LIST,
+  pubsubTopicShardInfo: { clusterId: 42, shard: 0 },
+});
+const portal_list_decoder = createDecoder(TOPIC_PORTALS_LIST, {
+  clusterId: 42,
+  shard: 0,
+});
 
 export const portalList = [];
 
@@ -19,12 +25,31 @@ const PortalListDataPacket = new protobuf.Type('PortalListDataPacket')
 
 export const createWakuNode = async () => {
   const node = await createLightNode({
-    defaultBootstrap: true,
-    pubsubTopics: ['/waku/2/rs/1/4'],
-    contentTopics: [TOPIC_PORTALS_LIST],
+    networkConfig: {
+      clusterId: 42,
+      shards: [0],
+    },
+    defaultBootstrap: false,
+    discovery: {
+      dns: false,
+      peerExchange: true,
+      localPeerCache: false,
+    },
+    numPeersToUse: 2,
+    autoStart: true,
   });
+
+  await Promise.allSettled([
+    node.dial(
+      '/dns4/waku-test.bloxy.one/tcp/8095/wss/p2p/16Uiu2HAmSZbDB7CusdRhgkD81VssRjQV5ZH13FbzCGcdnbbh6VwZ',
+    ),
+    node.dial(
+      '/dns4/vps-aaa00d52.vps.ovh.ca/tcp/8000/wss/p2p/16Uiu2HAm9PftGgHZwWE3wzdMde4m3kT2eYJFXLZfGoSED3gysofk',
+    ),
+  ]);
+
+  console.log(node);
   wakuNode = node;
-  await node.start();
   console.log('Waku Light node started ....');
 
   waku_SubToPortals();
@@ -74,20 +99,8 @@ const waku_SubToPortals = async () => {
     console.log(messageObj);
   };
   // Create a Filter subscription
-  const { error, subscription } = await wakuNode.filter.createSubscription({
-    contentTopics: [TOPIC_PORTALS_LIST],
-  });
-
-  if (error) {
-    console.error('WAKU ERR:', error);
-  } else {
-    console.log('SUB', subscription);
-  }
-
-  try {
-    // Subscribe to content topics and process new messages
-    await subscription.subscribe([portal_list_decoder], callback);
-  } catch (e) {
-    console.error('WAKU ', e);
-  }
+  await wakuNode.nextFilter.subscribe(
+    portal_list_decoder,
+    callback,
+  );
 };
