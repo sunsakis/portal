@@ -64,18 +64,18 @@ function App() {
   }
 
   // Show auth screen if not authenticated
-  if (!isAuthenticated) {
-    return (
-      <>
-        <AuthScreen 
-          onAuth={handleAuth}
-          loading={loading}
-          error={error}
-        />
-        <InstallPrompt />
-      </>
-    )
-  }
+  // if (!isAuthenticated) {
+  //   return (
+  //     <>
+  //       <AuthScreen 
+  //         onAuth={handleAuth}
+  //         loading={loading}
+  //         error={error}
+  //       />
+  //       <InstallPrompt />
+  //     </>
+  //   )
+  // }
 
   // Show main app if authenticated
   return (
