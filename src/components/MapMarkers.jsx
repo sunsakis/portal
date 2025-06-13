@@ -2,148 +2,95 @@ import React from 'react'
 import { Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 
-// Calculate appropriate marker size based on zoom level
+// Smooth, continuous scaling functions
 const getMarkerSizeForZoom = (zoom) => {
-  // At zoom 13 (city level), use base size of 30px
-  // At zoom 16 (street level), use larger size of 40px  
-  // At zoom 10 (regional), use smaller size of 20px
+  // Smooth interpolation between zoom levels
+  // Base size at zoom 13 = 30px, grows/shrinks smoothly
   const baseZoom = 13
   const baseSize = 30
+  const scaleFactor = 1.15 // How much size changes per zoom level
   
-  if (zoom >= 16) return 40 // Street level - larger markers
-  if (zoom >= 14) return 35 // Neighborhood level
-  if (zoom >= 12) return baseSize // City level - base size
-  if (zoom >= 10) return 25 // District level
-  return 20 // Regional level and out - smaller markers
+  // Smooth exponential scaling
+  const size = baseSize * Math.pow(scaleFactor, zoom - baseZoom)
+  
+  // Clamp between reasonable bounds for mobile
+  return Math.max(20, Math.min(50, size))
 }
 
-// Calculate pulse ring size (represents ~50m radius at different zooms)
-const getPulseRangeForZoom = (zoom) => {
-  // Approximate 50m radius representation at different zoom levels
-  if (zoom >= 18) return 80 // Very close - large pulse
-  if (zoom >= 16) return 65 // Street level
-  if (zoom >= 14) return 55 // Neighborhood
-  if (zoom >= 12) return 50 // City level
-  if (zoom >= 10) return 40 // District
-  return 35 // Regional and out - minimal pulse
+const getPulseSizeForZoom = (zoom) => {
+  // Pulse size represents ~50m radius, scales with zoom
+  const baseZoom = 13
+  const baseSize = 50
+  const scaleFactor = 1.2 // Pulse grows faster than marker
+  
+  const size = baseSize * Math.pow(scaleFactor, zoom - baseZoom)
+  return Math.max(35, Math.min(80, size))
 }
 
-// Create zoom-aware portal icon
+const getFontSizeForZoom = (zoom) => {
+  // Font scales with marker but stays readable
+  const markerSize = getMarkerSizeForZoom(zoom)
+  return Math.max(14, Math.min(22, markerSize * 0.6))
+}
+
+// Create smoothly scaling portal icon with CSS transforms
 export const createPortalIcon = (isUserPortal = false, zoom = 13) => {
-  const emoji = isUserPortal ? '🟢' : '🌀'
-  const color = isUserPortal ? '#10b981' : '#3b82f6'
-  const pulseColor = isUserPortal ? 'rgba(16, 185, 129, 0.3)' : 'rgba(59, 130, 246, 0.3)'
+  const emoji = '🟢' // Only green circle for all portals
+  const pulseColor = isUserPortal ? 'rgba(34, 197, 94, 0.4)' : 'rgba(59, 130, 246, 0.3)'
   
   const markerSize = getMarkerSizeForZoom(zoom)
-  const pulseSize = getPulseRangeForZoom(zoom)
-  const fontSize = Math.max(12, Math.min(20, markerSize * 0.6)) // Scale font with marker
+  const pulseSize = getPulseSizeForZoom(zoom)
+  const fontSize = getFontSizeForZoom(zoom)
+  
+  // Use CSS transforms for smooth scaling
+  const scale = markerSize / 30 // Relative to base size
   
   return L.divIcon({
     html: `
       <div style="
         position: relative;
-        width: ${markerSize}px;
-        height: ${markerSize}px;
+        width: 30px;
+        height: 30px;
         display: flex;
         align-items: center;
         justify-content: center;
+        transform: scale(${scale});
+        transform-origin: center center;
+        transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
       ">
-        <!-- Pulse ring representing ~50m range -->
+        <!-- Smooth pulse ring -->
         <div style="
           position: absolute;
-          width: ${pulseSize}px;
-          height: ${pulseSize}px;
+          width: ${pulseSize / scale}px;
+          height: ${pulseSize / scale}px;
           background: ${pulseColor};
           border-radius: 50%;
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
-          animation: pulse-animation-${zoom} 2s infinite;
+          animation: smooth-pulse-${Math.round(zoom * 10)} 2s ease-in-out infinite;
         "></div>
         
-        <!-- Main marker -->
+        <!-- Just the emoji, no borders or background -->
         <div style="
-          width: ${markerSize}px;
-          height: ${markerSize}px;
-          background: white;
-          border: 2px solid ${color};
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: ${fontSize}px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+          font-size: ${fontSize / scale}px;
           position: relative;
           z-index: 2;
           cursor: pointer;
+          transition: font-size 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+          line-height: 1;
         ">${emoji}</div>
       </div>
       
       <style>
-        @keyframes pulse-animation-${zoom} {
+        @keyframes smooth-pulse-${Math.round(zoom * 10)} {
           0% {
             transform: translate(-50%, -50%) scale(0.8);
-            opacity: 1;
+            opacity: 0.8;
           }
-          100% {
-            transform: translate(-50%, -50%) scale(1.4);
-            opacity: 0;
-          }
-        }
-      </style>
-    `,
-    className: '',
-    iconSize: [markerSize, markerSize],
-    iconAnchor: [markerSize/2, markerSize/2] // Always center
-  })
-}
-
-// Create zoom-aware user location icon
-export const createUserLocationIcon = (zoom = 13) => {
-  const locationSize = Math.max(16, Math.min(24, getMarkerSizeForZoom(zoom) * 0.7))
-  const pulseSize = Math.max(30, Math.min(50, getPulseRangeForZoom(zoom) * 0.8))
-  
-  return L.divIcon({
-    html: `
-      <div style="
-        position: relative;
-        width: ${locationSize}px;
-        height: ${locationSize}px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      ">
-        <!-- Pulse ring -->
-        <div style="
-          position: absolute;
-          width: ${pulseSize}px;
-          height: ${pulseSize}px;
-          background: rgba(34, 197, 94, 0.3);
-          border-radius: 50%;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          animation: user-pulse-animation-${zoom} 2s infinite;
-        "></div>
-        
-        <!-- Location dot -->
-        <div style="
-          width: ${locationSize}px;
-          height: ${locationSize}px;
-          background: #22c55e;
-          border: 3px solid white;
-          border-radius: 50%;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-          position: relative;
-          z-index: 2;
-        "></div>
-      </div>
-      
-      <style>
-        @keyframes user-pulse-animation-${zoom} {
-          0% {
-            transform: translate(-50%, -50%) scale(0.8);
-            opacity: 1;
+          50% {
+            transform: translate(-50%, -50%) scale(1.2);
+            opacity: 0.4;
           }
           100% {
             transform: translate(-50%, -50%) scale(1.6);
@@ -152,40 +99,136 @@ export const createUserLocationIcon = (zoom = 13) => {
         }
       </style>
     `,
-    className: '',
-    iconSize: [locationSize, locationSize],
-    iconAnchor: [locationSize/2, locationSize/2] // Always center
+    className: 'smooth-portal-marker',
+    iconSize: [30, 30], // Keep consistent base size
+    iconAnchor: [15, 15] // Always centered
   })
 }
 
-// Hook to get current map zoom
+// Smooth user location icon
+export const createUserLocationIcon = (zoom = 13) => {
+  const baseSize = 20
+  const scale = getMarkerSizeForZoom(zoom) / 30 // Relative scaling
+  const pulseSize = getPulseSizeForZoom(zoom)
+  
+  return L.divIcon({
+    html: `
+      <div style="
+        position: relative;
+        width: ${baseSize}px;
+        height: ${baseSize}px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transform: scale(${scale});
+        transform-origin: center center;
+        transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+      ">
+        <!-- Smooth user pulse -->
+        <div style="
+          position: absolute;
+          width: ${pulseSize / scale}px;
+          height: ${pulseSize / scale}px;
+          background: rgba(34, 197, 94, 0.3);
+          border-radius: 50%;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          animation: smooth-user-pulse-${Math.round(zoom * 10)} 2s ease-in-out infinite;
+        "></div>
+        
+        <!-- User location dot -->
+        <div style="
+          width: ${baseSize}px;
+          height: ${baseSize}px;
+          background: #22c55e;
+          border: 3px solid white;
+          border-radius: 50%;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+          position: relative;
+          z-index: 2;
+          transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+        "></div>
+      </div>
+      
+      <style>
+        @keyframes smooth-user-pulse-${Math.round(zoom * 10)} {
+          0% {
+            transform: translate(-50%, -50%) scale(0.8);
+            opacity: 0.8;
+          }
+          50% {
+            transform: translate(-50%, -50%) scale(1.4);
+            opacity: 0.4;
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(1.8);
+            opacity: 0;
+          }
+        }
+      </style>
+    `,
+    className: 'smooth-user-marker',
+    iconSize: [baseSize, baseSize],
+    iconAnchor: [baseSize/2, baseSize/2]
+  })
+}
+
+// Enhanced zoom hook with smooth updates
 const useMapZoom = () => {
   const map = useMap()
   const [zoom, setZoom] = React.useState(map.getZoom())
   
   React.useEffect(() => {
+    let animationFrame = null
+    
     const updateZoom = () => {
-      const currentZoom = map.getZoom()
-      setZoom(currentZoom)
-      console.log(`Map zoom changed to: ${currentZoom}`) // Keep console logs for mobile debugging
+      // Cancel any pending updates
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame)
+      }
+      
+      // Smooth update on next frame
+      animationFrame = requestAnimationFrame(() => {
+        const currentZoom = map.getZoom()
+        setZoom(currentZoom)
+        console.log(`Map zoom smoothly updated to: ${currentZoom.toFixed(2)}`)
+      })
     }
     
+    // Listen to both zoom and zoomend for ultra-smooth scaling
+    map.on('zoom', updateZoom)
     map.on('zoomend', updateZoom)
-    return () => map.off('zoomend', updateZoom)
+    
+    return () => {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame)
+      }
+      map.off('zoom', updateZoom)
+      map.off('zoomend', updateZoom)
+    }
   }, [map])
   
   return zoom
 }
 
-// User Portal Marker Component with zoom awareness
+// User Portal Marker with smooth zoom scaling
 export const UserPortalMarker = ({ portal, onPortalClick }) => {
   const zoom = useMapZoom()
-  console.log('UserPortalMarker render:', portal, 'zoom:', zoom)
+  const [currentIcon, setCurrentIcon] = React.useState(null)
   
-  if (!portal) return null
+  console.log('UserPortalMarker render at zoom:', zoom.toFixed(2))
+  
+  // Update icon smoothly when zoom changes
+  React.useEffect(() => {
+    const newIcon = createPortalIcon(true, zoom)
+    setCurrentIcon(newIcon)
+  }, [zoom])
+  
+  if (!portal || !currentIcon) return null
 
   const handleClick = (e) => {
-    console.log('User portal marker clicked at zoom', zoom, e)
+    console.log('User portal clicked at zoom', zoom.toFixed(2))
     e.originalEvent?.preventDefault()
     e.originalEvent?.stopPropagation()
     onPortalClick(portal)
@@ -194,7 +237,7 @@ export const UserPortalMarker = ({ portal, onPortalClick }) => {
   return (
     <Marker 
       position={[portal.latitude, portal.longitude]}
-      icon={createPortalIcon(true, zoom)}
+      icon={currentIcon}
       eventHandlers={{
         click: handleClick
       }}
@@ -206,7 +249,9 @@ export const UserPortalMarker = ({ portal, onPortalClick }) => {
             <div>Range: ~50m radius</div>
             <div>Accuracy: ±{Math.round(portal.accuracy || 0)}m</div>
             <div>Active since: {new Date(portal.created_at).toLocaleTimeString()}</div>
-            <div className="text-xs text-gray-500 mt-1">Zoom: {zoom}</div>
+            <div className="text-xs text-gray-500 mt-1">
+              Zoom: {zoom.toFixed(1)} • Scale: {(getMarkerSizeForZoom(zoom) / 30).toFixed(2)}x
+            </div>
             <button 
               onClick={(e) => {
                 e.preventDefault()
@@ -224,10 +269,11 @@ export const UserPortalMarker = ({ portal, onPortalClick }) => {
   )
 }
 
-// Other Portals Markers Component with zoom awareness
+// Other Portals with smooth zoom scaling
 export const OtherPortalsMarkers = ({ portals, userId, onPortalClick }) => {
   const zoom = useMapZoom()
-  console.log('OtherPortalsMarkers render:', portals?.length, 'portals at zoom:', zoom)
+  
+  console.log('OtherPortalsMarkers render:', portals?.length, 'portals at zoom:', zoom.toFixed(2))
   
   return (
     <>
@@ -235,44 +281,64 @@ export const OtherPortalsMarkers = ({ portals, userId, onPortalClick }) => {
         if (portal.user_id === userId) return null
         
         const handleClick = (e) => {
-          console.log('Other portal marker clicked', portal.id, 'zoom:', zoom, e)
+          console.log('Other portal clicked:', portal.id.slice(0, 8), 'zoom:', zoom.toFixed(2))
           e.originalEvent?.preventDefault()
           e.originalEvent?.stopPropagation()
           onPortalClick(portal)
         }
 
         return (
-          <Marker
+          <PortalMarkerItem
             key={portal.id}
-            position={[portal.latitude, portal.longitude]}
-            icon={createPortalIcon(false, zoom)}
-            eventHandlers={{
-              click: handleClick
-            }}
-          >
-            <Popup>
-              <div className="p-2">
-                <strong className="block text-sm mb-1">{portal.title}</strong>
-                <span className="text-xs text-gray-600 block mb-2">{portal.description}</span>
-                <div className="text-xs text-gray-500 mb-2">
-                  <div>Range: ~50m radius</div>
-                  <div>Zoom level: {zoom}</div>
-                </div>
-                <button 
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    onPortalClick(portal)
-                  }}
-                  className="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600 transition-colors"
-                >
-                  Join Chat
-                </button>
-              </div>
-            </Popup>
-          </Marker>
+            portal={portal}
+            zoom={zoom}
+            onClick={handleClick}
+          />
         )
       })}
     </>
   )
 }
+
+// Separate component for individual portal markers to optimize re-renders
+const PortalMarkerItem = React.memo(({ portal, zoom, onClick }) => {
+  const [currentIcon, setCurrentIcon] = React.useState(null)
+  
+  React.useEffect(() => {
+    const newIcon = createPortalIcon(false, zoom)
+    setCurrentIcon(newIcon)
+  }, [zoom])
+  
+  if (!currentIcon) return null
+  
+  return (
+    <Marker
+      position={[portal.latitude, portal.longitude]}
+      icon={currentIcon}
+      eventHandlers={{
+        click: onClick
+      }}
+    >
+      <Popup>
+        <div className="p-2">
+          <strong className="block text-sm mb-1">{portal.title}</strong>
+          <span className="text-xs text-gray-600 block mb-2">{portal.description}</span>
+          <div className="text-xs text-gray-500 mb-2">
+            <div>Range: ~50m radius</div>
+            <div>Zoom: {zoom.toFixed(1)} • Scale: {(getMarkerSizeForZoom(zoom) / 30).toFixed(2)}x</div>
+          </div>
+          <button 
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onClick(e)
+            }}
+            className="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600 transition-colors"
+          >
+            Join Chat
+          </button>
+        </div>
+      </Popup>
+    </Marker>
+  )
+})
