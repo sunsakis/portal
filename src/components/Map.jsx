@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { MapContainer } from 'react-leaflet'
 import { motion, AnimatePresence } from 'framer-motion'
 
-import { useSupabaseAuth, useGeolocation, usePortals } from '../hooks/useSupabase'
+import { useLocalAuth, useGeolocation, useLocalPortals } from '../hooks/useLocalHooks'
 import { MapControls, MapEventHandler } from './MapControls'
 import { UserPortalMarker, OtherPortalsMarkers } from './MapMarkers'
 import ChatPortal from './ChatPortal'
@@ -14,9 +14,9 @@ import 'leaflet-defaulticon-compatibility'
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css'
 
 export default function Map() {
-  const { user, signInAnonymously } = useSupabaseAuth()
+  const { user, signInAnonymously } = useLocalAuth()
   const { error: geoError, getCurrentLocation, location: userLocation } = useGeolocation()
-  const { portals, userPortal, createPortal, closePortal, connectionStatus } = usePortals(user)
+  const { portals, userPortal, createPortal, closePortal, connectionStatus } = useLocalPortals(user)
   
   const [selectedPortal, setSelectedPortal] = useState(null)
   const [showChatPortal, setShowChatPortal] = useState(false)
@@ -99,16 +99,16 @@ export default function Map() {
   // Auto sign-in anonymously for privacy
   useEffect(() => {
     if (!user) {
-      addDebugLog('Attempting anonymous sign-in...', 'info')
+      addDebugLog('Creating anonymous local user...', 'info')
       signInAnonymously()
     }
   }, [user, signInAnonymously, addDebugLog])
 
   // Initial debug info
   useEffect(() => {
-    addDebugLog('Portal app initialized', 'info')
+    addDebugLog('Portal app initialized (LOCAL MODE)', 'info')
     addDebugLog(`Environment: ${import.meta.env.DEV ? 'DEVELOPMENT' : 'PRODUCTION'}`, 'info')
-    addDebugLog('Privacy mode: Anonymous authentication', 'success')
+    addDebugLog('Privacy mode: Local storage only', 'success')
   }, [addDebugLog])
 
   // Log map center changes
@@ -121,14 +121,14 @@ export default function Map() {
 
   // Log connection status changes
   useEffect(() => {
-    addDebugLog(`Connection: ${connectionStatus}`, connectionStatus === 'connected' ? 'success' : 'warning')
+    addDebugLog(`Connection: ${connectionStatus} (LOCAL)`, connectionStatus === 'connected' ? 'success' : 'warning')
   }, [connectionStatus, addDebugLog])
 
   // Log portal changes
   useEffect(() => {
     addDebugLog(`Portals nearby: ${portals.length}`, 'info')
     if (userPortal) {
-      addDebugLog(`User portal active`, 'success')
+      addDebugLog(`User portal active: ${userPortal.id.slice(0, 8)}...`, 'success')
     }
     if (closestPortal) {
       addDebugLog(`Closest portal: ${closestPortal.distance.toFixed(1)}km away`, 'info')
@@ -138,7 +138,7 @@ export default function Map() {
   const handleCreatePortal = async () => {
     if (!user || isPlacingPin) return
 
-    addDebugLog('Creating portal...', 'info')
+    addDebugLog('Creating local portal...', 'info')
     setIsPlacingPin(true)
 
     try {
@@ -151,7 +151,7 @@ export default function Map() {
       if (error) {
         addDebugLog(`Portal creation failed: ${error}`, 'error')
       } else {
-        addDebugLog('Portal created successfully', 'success')
+        addDebugLog(`Portal created: ${data.id.slice(0, 8)}...`, 'success')
       }
     } catch (err) {
       const errorMsg = err.message || err.toString()
@@ -162,19 +162,27 @@ export default function Map() {
   }
 
   const handleClosePortal = async () => {
-    addDebugLog('Closing portal...', 'info')
+    addDebugLog('Closing local portal...', 'info')
     const { error } = await closePortal()
     if (error) {
       addDebugLog(`Close failed: ${error}`, 'error')
     } else {
-      addDebugLog('Portal closed', 'success')
+      addDebugLog('Portal closed successfully', 'success')
     }
   }
 
   const handlePortalClick = (portal) => {
-    addDebugLog(`Opening chat for portal: ${portal.id.slice(0, 8)}`, 'info')
+    addDebugLog(`Opening chat for portal: ${portal.id.slice(0, 8)}...`, 'info')
     setSelectedPortal(portal)
     setShowChatPortal(true)
+  }
+
+  const handleClearData = () => {
+    addDebugLog('Clearing all local data...', 'warning')
+    localStorage.removeItem('portal_user')
+    localStorage.removeItem('portal_messages')
+    localStorage.removeItem('portal_data')
+    window.location.reload()
   }
 
   return (
@@ -183,8 +191,8 @@ export default function Map() {
       <ConnectionStatus 
         connectionStatus={connectionStatus}
         onRetry={() => {
-          addDebugLog('Manual connection retry', 'info')
-          signInAnonymously()
+          addDebugLog('Manual refresh (local mode)', 'info')
+          window.location.reload()
         }}
       />
 
@@ -196,7 +204,7 @@ export default function Map() {
       >
         {/* Debug Header */}
         <div className="flex items-center justify-between p-2 bg-black/80 border-b border-gray-600 rounded-t-lg">
-          <h3 className="text-xs font-bold">🐛 Debug Console</h3>
+          <h3 className="text-xs font-bold">🐛 Debug Console (LOCAL)</h3>
           <div className="flex gap-1">
             <button
               onClick={() => setDebugMinimized(!debugMinimized)}
@@ -224,13 +232,16 @@ export default function Map() {
                 <div>GPS: {userLocation ? '🟢' : '🔴'}</div>
               </div>
               <div className="mt-1 text-xs text-gray-300">
+                Mode: LOCAL STORAGE
+              </div>
+              <div className="text-xs text-gray-300">
                 Center: {userLocation ? 'GPS' : closestPortal ? 'Portal' : 'Berlin'}
               </div>
             </div>
 
             {/* Actions */}
             <div className="p-2 border-b border-gray-600">
-              <div className="flex gap-1">
+              <div className="flex gap-1 mb-1">
                 <button
                   onClick={() => getCurrentLocation().then(loc => {
                     addDebugLog(`GPS: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)} ±${loc.accuracy}m`, 'success')
@@ -251,6 +262,12 @@ export default function Map() {
                   Refresh
                 </button>
               </div>
+              <button
+                onClick={handleClearData}
+                className="text-xs bg-red-600 px-2 py-1 rounded w-full"
+              >
+                Clear All Data
+              </button>
             </div>
 
             {/* Console Logs */}

@@ -1,15 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useDrag } from '@use-gesture/react'
-import { supabase } from '../hooks/useSupabase'
+import { useLocalMessages } from '../hooks/useLocalHooks'
 
 const ChatPortal = ({ isOpen, onClose, portal, user }) => {
   const [message, setMessage] = useState('')
-  const [messages, setMessages] = useState([])
-  const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+
+  // Use local message management
+  const { messages, loading, sendMessage } = useLocalMessages(portal?.id, user)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -25,123 +26,25 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
     }
   }, [isOpen])
 
-  // Load existing messages and set up real-time subscription
-  useEffect(() => {
-    if (!isOpen || !portal?.id || !supabase) {
-      setMessages([])
-      setError(null)
-      return
-    }
-
-    const loadMessages = async () => {
-      setLoading(true)
-      setError(null)
-      
-      try {
-        console.log('Loading messages for portal:', portal.id)
-        
-        const { data, error } = await supabase
-          .from('messages')
-          .select(`
-            id,
-            content,
-            created_at,
-            user_id,
-            message_type,
-            profiles:user_id (username, avatar_url)
-          `)
-          .eq('portal_id', portal.id)
-          .order('created_at', { ascending: true })
-
-        if (error) {
-          console.error('Error loading messages:', error)
-          setError('Failed to load messages')
-        } else {
-          console.log('Messages loaded:', data?.length || 0)
-          setMessages(data || [])
-        }
-      } catch (err) {
-        console.error('Message loading failed:', err)
-        setError('Failed to load messages')
-      }
-      
-      setLoading(false)
-    }
-
-    loadMessages()
-
-    // Subscribe to new messages
-    const channel = supabase
-      .channel(`portal_${portal.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `portal_id=eq.${portal.id}`
-        },
-        async (payload) => {
-          console.log('New message received:', payload.new)
-          
-          // Fetch the new message with profile data
-          try {
-            const { data, error } = await supabase
-              .from('messages')
-              .select(`
-                id,
-                content,
-                created_at,
-                user_id,
-                message_type,
-                profiles:user_id (username, avatar_url)
-              `)
-              .eq('id', payload.new.id)
-              .single()
-
-            if (data && !error) {
-              setMessages(prev => [...prev, data])
-            }
-          } catch (err) {
-            console.error('Error fetching new message:', err)
-          }
-        }
-      )
-      .subscribe((status) => {
-        console.log('Message subscription status:', status)
-      })
-
-    return () => {
-      console.log('Cleaning up message subscription')
-      supabase.removeChannel(channel)
-    }
-  }, [isOpen, portal?.id])
-
-  const sendMessage = async () => {
-    if (!message.trim() || !portal?.id || !user || !supabase) return
+  const handleSendMessage = async () => {
+    if (!message.trim() || !portal?.id || !user) return
 
     const messageContent = message.trim()
     setMessage('') // Clear input immediately
+    setError(null)
 
     try {
-      console.log('Sending message:', messageContent)
+      console.log('Sending local message:', messageContent)
       
-      const { error } = await supabase
-        .from('messages')
-        .insert({
-          portal_id: portal.id,
-          user_id: user.id,
-          content: messageContent,
-          message_type: 'text'
-        })
+      const success = await sendMessage(messageContent)
 
-      if (error) {
-        console.error('Error sending message:', error)
+      if (!success) {
+        console.error('Local message send failed')
         setMessage(messageContent) // Restore message on error
         setError('Failed to send message')
       }
     } catch (err) {
-      console.error('Message send failed:', err)
+      console.error('Message send error:', err)
       setMessage(messageContent) // Restore message on error
       setError('Failed to send message')
     }
@@ -150,7 +53,7 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      sendMessage()
+      handleSendMessage()
     }
   }
 
@@ -213,6 +116,9 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
                   <p className="text-sm text-gray-600">
                     {portal?.description || 'Chat with people at this location'}
                   </p>
+                  <p className="text-xs text-green-600 mt-1">
+                    Local mode - messages stored on device
+                  </p>
                 </div>
                 <button
                   onClick={onClose}
@@ -246,6 +152,9 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
                   <div className="text-4xl mb-2">👋</div>
                   <p className="text-gray-500">
                     Start a conversation with people at this location!
+                  </p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Messages are stored locally on your device
                   </p>
                 </div>
               ) : (
@@ -292,14 +201,13 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
                     className="w-full px-4 py-3 border border-gray-300 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     rows="1"
                     style={{ minHeight: '44px', maxHeight: '100px' }}
-                    disabled={!supabase}
                   />
                 </div>
                 <button
-                  onClick={sendMessage}
-                  disabled={!message.trim() || !supabase}
+                  onClick={handleSendMessage}
+                  disabled={!message.trim()}
                   className={`p-3 rounded-full font-medium transition-colors ${
-                    message.trim() && supabase
+                    message.trim()
                       ? 'bg-blue-500 text-white hover:bg-blue-600'
                       : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   }`}

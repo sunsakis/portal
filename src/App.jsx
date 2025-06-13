@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react'
 import Map from './components/Map'
 import AuthScreen from './components/AuthScreen'
 import InstallPrompt from './components/InstallPrompt'
-import { useSupabaseAuth } from './hooks/useSupabase'
+import { useLocalAuth } from './hooks/useLocalHooks'
 import { registerSW } from 'virtual:pwa-register'
 import './App.css'
 
 function App() {
-  const { user, loading, error, authenticateWithCode, isAuthenticated } = useSupabaseAuth()
+  const { user, loading, error, authenticateWithCode, isAuthenticated } = useLocalAuth()
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const [swRegistration, setSwRegistration] = useState(null)
 
@@ -63,7 +63,9 @@ function App() {
     )
   }
 
-  // Show auth screen if not authenticated
+  // For local development, skip auth and go straight to map
+  // Uncomment the auth screen below if you want to test the auth UI
+  
   // if (!isAuthenticated) {
   //   return (
   //     <>
@@ -77,7 +79,7 @@ function App() {
   //   )
   // }
 
-  // Show main app if authenticated
+  // Show main app (user is auto-created anonymously)
   return (
     <div className="App">
       <Map />
