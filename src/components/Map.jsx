@@ -419,12 +419,16 @@ export default function Map() {
         animate={{ scale: 1 }}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 justify ${
+        className={`fixed bottom-6 justify-center portal-button-center ${
           userPortal 
             ? 'bg-red-500 hover:bg-red-600 opacity-50' 
             : 'bg-green-500 hover:bg-green-600 opacity-50'
         } text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-semibold transition-colors z-[1600]`}
-        style={{ marginBottom: 'max(env(safe-area-inset-bottom, 0px), 20px)' }}
+        style={{ 
+          left: '50%',
+          transform: 'translateX(-50%)',
+          marginBottom: 'max(env(safe-area-inset-bottom, 0px), 20px)' 
+        }}
         onClick={userPortal ? handleClosePortal : handleCreatePortal}
         disabled={isPlacingPin}
       >
@@ -439,7 +443,7 @@ export default function Map() {
           </>
         ) : (
           <>
-            <span className="text-xl">🌀</span>
+            <span className="text-xl">🟢</span>
             <span>Open Portal</span>
           </>
         )}
