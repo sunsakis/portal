@@ -3,24 +3,13 @@ import { registerSW } from 'virtual:pwa-register';
 import AuthScreen from './components/AuthScreen';
 import InstallPrompt from './components/InstallPrompt';
 import Map from './components/Map';
-import { useSupabaseAuth } from './hooks/useSupabase';
+import { useLocalAuth } from './hooks/useLocalHooks';
 import './App.css';
-import { createWakuNode } from './waku/node';
 
 function App() {
-  const { user, loading, error, authenticateWithCode, isAuthenticated } =
-    useSupabaseAuth();
+  const { user, loading, error, authenticateWithCode, isAuthenticated } = useLocalAuth();
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-
-  console.log('YO');
-
-  try {
-    console.log('GOING');
-    // createWakuNode();
-  } catch (e) {
-    console.error('WAKU err:', e);
-  }
 
   useEffect(() => {
     // Register service worker with full PWA functionality
@@ -75,7 +64,9 @@ function App() {
     );
   }
 
-  // Show auth screen if not authenticated
+  // For local development, skip auth and go straight to map
+  // Uncomment the auth screen below if you want to test the auth UI
+
   // if (!isAuthenticated) {
   //   return (
   //     <>
@@ -89,10 +80,10 @@ function App() {
   //   )
   // }
 
-  // Show main app if authenticated
+  // Show main app (user is auto-created anonymously)
   return (
     <div className='App'>
-      {/*<Map />*/}
+      <Map />
 
       <InstallPrompt />
 

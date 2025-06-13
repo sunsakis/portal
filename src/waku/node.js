@@ -1,9 +1,10 @@
 import { createLightNode } from '@waku/sdk';
 import { createDecoder, createEncoder } from '@waku/sdk';
+import protobuf from 'protobufjs';
 
-export const wakuNode = null;
+export let wakuNode = null;
 
-export const TOPIC_PORTALS_LIST = 'TOPIC_PORTALS_LIST';
+export const TOPIC_PORTALS_LIST = '/TOPIC_PORTALS_LIST/1/message/proto';
 const portal_list_encoder = createEncoder({ contentTopic: TOPIC_PORTALS_LIST });
 const portal_list_decoder = createDecoder(TOPIC_PORTALS_LIST);
 
@@ -18,7 +19,13 @@ const PortalListDataPacket = new protobuf.Type('PortalListDataPacket')
 
 export const createWakuNode = async () => {
   console.log('Waku Light node started ....');
-  const node = await createLightNode({ defaultBootstrap: true });
+  const node = await createLightNode({
+    defaultBootstrap: true,
+    networkConfig: {
+      clusterId: 1,
+      contentTopics: [TOPIC_PORTALS_LIST],
+    },
+  });
   wakuNode = node;
   await node.start();
   await waku_SubToPortals();
@@ -35,10 +42,10 @@ const waku_OpenPortal = async () => {
   });
 
   // Serialise the message using Protobuf
-  const serialisedMessage = DataPacket.encode(protoMessage).finish();
+  const serialisedMessage = PortalListDataPacket.encode(protoMessage).finish();
 
   // Send the message using Light Push
-  await node.lightPush.send(portal_list_encoder, {
+  await wakuNode.lightPush.send(portal_list_encoder, {
     payload: serialisedMessage,
   });
 };
@@ -48,13 +55,13 @@ const waku_SubToPortals = async () => {
     // Check if there is a payload on the message
     if (!wakuMessage.payload) return;
     // Render the messageObj as desired in your application
-    const messageObj = DataPacket.decode(wakuMessage.payload);
+    const messageObj = PortalListDataPacket.decode(wakuMessage.payload);
     portalList.push(messageObj);
     console.log(messageObj);
   };
   // Create a Filter subscription
-  const { error, subscription } = await node.filter.createSubscription({
-    contentTopics: [contentTopic],
+  const { error, subscription } = await wakuNode.filter.createSubscription({
+    contentTopics: [TOPIC_PORTALS_LIST],
   });
   if (error) {
     console.error(error);
