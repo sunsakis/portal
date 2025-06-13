@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react'
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { MapContainer } from 'react-leaflet'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -89,12 +89,12 @@ export default function Map() {
     return [berlinPrenzlauerBerg.latitude, berlinPrenzlauerBerg.longitude]
   }, [userLocation, closestPortal, berlinPrenzlauerBerg])
 
-  // Debug logging - ALWAYS ACTIVE for mobile testing
+  // Debug logging - ALWAYS ACTIVE for mobile testing (FIXED - memoized to prevent loops)
   const addDebugLog = useCallback((message, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString()
     setDebugInfo(prev => [...prev.slice(-20), { timestamp, message, type }])
     console.log(`[${timestamp}] ${type.toUpperCase()}: ${message}`)
-  }, [])
+  }, []) // No dependencies to prevent loops
 
   // Auto sign-in anonymously for privacy
   useEffect(() => {
@@ -111,29 +111,41 @@ export default function Map() {
     addDebugLog('Privacy mode: Local storage only', 'success')
   }, [addDebugLog])
 
-  // Log map center changes
+  // Log map center changes (FIXED - only log when center actually changes)
+  const mapCenterString = `${mapCenter[0].toFixed(4)},${mapCenter[1].toFixed(4)}`
+  const prevMapCenterRef = useRef('')
+  
   useEffect(() => {
-    const centerType = userLocation ? 'User GPS' : 
-                      closestPortal ? `Closest Portal (${closestPortal.distance.toFixed(1)}km away)` : 
-                      'Berlin Prenzlauer Berg'
-    addDebugLog(`Map center: ${centerType} [${mapCenter[0].toFixed(4)}, ${mapCenter[1].toFixed(4)}]`, 'info')
-  }, [mapCenter, userLocation, closestPortal, addDebugLog])
+    if (prevMapCenterRef.current !== mapCenterString) {
+      prevMapCenterRef.current = mapCenterString
+      const centerType = userLocation ? 'User GPS' : 
+                        closestPortal ? `Closest Portal (${closestPortal.distance.toFixed(1)}km away)` : 
+                        'Berlin Prenzlauer Berg'
+      console.log(`Map center: ${centerType} [${mapCenterString}]`)
+    }
+  }, [mapCenterString, userLocation, closestPortal])
 
-  // Log connection status changes
+  // Log connection status changes (FIXED - only console.log, no addDebugLog)
   useEffect(() => {
-    addDebugLog(`Connection: ${connectionStatus} (LOCAL)`, connectionStatus === 'connected' ? 'success' : 'warning')
-  }, [connectionStatus, addDebugLog])
+    console.log(`Connection: ${connectionStatus} (LOCAL)`)
+  }, [connectionStatus])
 
-  // Log portal changes
+  // Log portal changes (FIXED - only console.log, no addDebugLog)
   useEffect(() => {
-    addDebugLog(`Portals nearby: ${portals.length}`, 'info')
+    console.log(`Portals nearby: ${portals.length}`)
     if (userPortal) {
-      addDebugLog(`User portal active: ${userPortal.id.slice(0, 8)}...`, 'success')
+      console.log(`User portal active: ${userPortal.id.slice(0, 8)}...`)
     }
     if (closestPortal) {
-      addDebugLog(`Closest portal: ${closestPortal.distance.toFixed(1)}km away`, 'info')
+      console.log(`Closest portal: ${closestPortal.distance.toFixed(1)}km away`)
     }
-  }, [portals, userPortal, closestPortal, addDebugLog])
+  }, [portals.length, userPortal?.id, closestPortal?.distance])
+
+  // Chat state logging (separate, no loops)
+  useEffect(() => {
+    console.log('Chat state - Selected portal:', selectedPortal?.id)
+    console.log('Chat state - Show chat:', showChatPortal)
+  }, [selectedPortal?.id, showChatPortal])
 
   const handleCreatePortal = async () => {
     if (!user || isPlacingPin) return
@@ -172,9 +184,18 @@ export default function Map() {
   }
 
   const handlePortalClick = (portal) => {
+    console.log('Portal clicked:', portal)
     addDebugLog(`Opening chat for portal: ${portal.id.slice(0, 8)}...`, 'info')
     setSelectedPortal(portal)
     setShowChatPortal(true)
+    
+    // Force focus on mobile to ensure the modal appears
+    setTimeout(() => {
+      const chatModal = document.querySelector('[role="dialog"]')
+      if (chatModal) {
+        chatModal.focus()
+      }
+    }, 100)
   }
 
   const handleClearData = () => {
@@ -230,6 +251,8 @@ export default function Map() {
                 <div>Portal: {userPortal ? '🟢' : '⚪'}</div>
                 <div>Nearby: {portals.length}</div>
                 <div>GPS: {userLocation ? '🟢' : '🔴'}</div>
+                <div>Chat: {showChatPortal ? '💬' : '⚪'}</div>
+                <div>Selected: {selectedPortal ? '✅' : '❌'}</div>
               </div>
               <div className="mt-1 text-xs text-gray-300">
                 Mode: LOCAL STORAGE
@@ -237,6 +260,11 @@ export default function Map() {
               <div className="text-xs text-gray-300">
                 Center: {userLocation ? 'GPS' : closestPortal ? 'Portal' : 'Berlin'}
               </div>
+              {selectedPortal && (
+                <div className="text-xs text-yellow-300 mt-1">
+                  Chat Portal: {selectedPortal.id.slice(0, 8)}...
+                </div>
+              )}
             </div>
 
             {/* Actions */}
@@ -260,6 +288,34 @@ export default function Map() {
                   className="text-xs bg-blue-600 px-2 py-1 rounded flex-1"
                 >
                   Refresh
+                </button>
+              </div>
+              <div className="flex gap-1 mb-1">
+                <button
+                  onClick={() => {
+                    if (userPortal) {
+                      addDebugLog('Testing user portal click...', 'info')
+                      handlePortalClick(userPortal)
+                    } else if (portals.length > 0) {
+                      addDebugLog('Testing first portal click...', 'info')
+                      handlePortalClick(portals[0])
+                    } else {
+                      addDebugLog('No portals to test', 'warning')
+                    }
+                  }}
+                  className="text-xs bg-purple-600 px-2 py-1 rounded flex-1"
+                >
+                  Test Chat
+                </button>
+                <button
+                  onClick={() => {
+                    addDebugLog('Force closing chat...', 'info')
+                    setShowChatPortal(false)
+                    setSelectedPortal(null)
+                  }}
+                  className="text-xs bg-orange-600 px-2 py-1 rounded flex-1"
+                >
+                  Close Chat
                 </button>
               </div>
               <button

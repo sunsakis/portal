@@ -99,6 +99,8 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl touch-none flex flex-col"
+            role="dialog"
+            aria-modal="true"
             style={{ 
               maxHeight: '70vh', 
               zIndex: 1900,
