@@ -1,12 +1,13 @@
 import { createLightNode, Decoder, Encoder, LightNode, Protocols } from '@waku/sdk';
 import { createDecoder, createEncoder } from '@waku/sdk';
 import protobuf from 'protobufjs';
+import IdentStore from './IdentStore';
 
 let wakuNode: LightNode;
 
 export const TOPIC_PORTALS_LIST = '/PORTALS_LIST2/1/message/proto';
 export const TOPIC_PORTALS_MESSAGE = '/PORTALS_MESSAGE2/1/message/proto';
-export const TOPIC_PRIVATE_CHANNEL = 'PRIVATE_CHANNEL/1/message/proto';
+export const TOPIC_FREN_REQUESTS = '/FREN_REQUESTS/1/message/proto';
 
 export const BOOTSTRAP_PEERS = [
   '/dns4/boot-01.do-ams3.status.prod.status.im/tcp/443/wss/p2p/16Uiu2HAmAR24Mbb6VuzoyUiGx42UenDkshENVDj4qnmmbabLvo31',
@@ -17,6 +18,8 @@ export const BOOTSTRAP_PEERS = [
 export const CLUSTER_ID = 42;
 export const SHARD_ID = 0;
 export let wakuIsReady = false;
+
+export const idStore = new IdentStore();
 
 const portal_list_encoder = createEncoder({
   contentTopic: TOPIC_PORTALS_LIST,
@@ -34,8 +37,14 @@ const portal_message_decoder = createDecoder(TOPIC_PORTALS_MESSAGE, {
   clusterId: CLUSTER_ID,
   shard: SHARD_ID,
 });
-let fren_message_encoder: Encoder;
-let fren_message_decoder: Decoder;
+const fren_request_encoder = createEncoder({
+  contentTopic: TOPIC_FREN_REQUESTS,
+  pubsubTopicShardInfo: { clusterId: CLUSTER_ID, shard: SHARD_ID },
+});
+const fren_request_decoder = createDecoder(TOPIC_FREN_REQUESTS, {
+  clusterId: CLUSTER_ID,
+  shard: SHARD_ID,
+});
 
 const PortalListDataPacket = new protobuf.Type('PortalListDataPacket')
   .add(new protobuf.Field('timestamp', 1, 'uint64'))
@@ -139,7 +148,7 @@ export const createWakuNode = async () => {
 
   await waku_SubToPortals();
   await waku_SubToMessages();
-  await waku_SubToOwnChannel();
+  await waku_SubToFrenRequests();
 
   wakuIsReady = true;
 
@@ -225,19 +234,7 @@ export const waku_SendPortalMessage = async (message: PortalMessage) => {
   }
 };
 
-const waku_SubToOwnChannel = async () => {
-  const ePubId = '1';
-  const topic = `/${ePubId}${TOPIC_PRIVATE_CHANNEL}`;
-  const message_decoder = createDecoder(topic, {
-    clusterId: CLUSTER_ID,
-    shard: SHARD_ID,
-  });
-  const message_encoder = createEncoder({
-    contentTopic: topic,
-    pubsubTopicShardInfo: { clusterId: CLUSTER_ID, shard: SHARD_ID },
-  });
-  fren_message_decoder = message_decoder;
-  fren_message_encoder = message_encoder;
+const waku_SubToFrenRequestrs = async () => {
   const callback = (wakuMessage: any) => {
     console.log('new msg', wakuMessage);
     if (!wakuMessage.payload) return;
@@ -248,7 +245,7 @@ const waku_SubToOwnChannel = async () => {
   };
   try {
     await wakuNode.nextFilter.subscribe(
-      message_decoder,
+      fren_request_decoder,
       callback,
     );
   } catch (e) {
@@ -261,7 +258,7 @@ export const waku_SendFrenMessage = async (message: PortalMessage) => {
   const protoMessage = FriendRequestDataPacket.create(message);
   const serialisedMessage = FriendRequestDataPacket.encode(protoMessage).finish();
   try {
-    await wakuNode.lightPush.send(fren_message_encoder, {
+    await wakuNode.lightPush.send(fren_request_encoder, {
       payload: serialisedMessage,
     });
   } catch (e) {
