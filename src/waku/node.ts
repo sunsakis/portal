@@ -15,7 +15,7 @@ export const BOOTSTRAP_PEERS = [
 ];
 
 export const CLUSTER_ID = 42;
-export const SHARD_ID = 1;
+export const SHARD_ID = 0;
 
 const portal_list_encoder = createEncoder({
   contentTopic: TOPIC_PORTALS_LIST,
