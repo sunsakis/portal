@@ -54,111 +54,6 @@ body {
   margin: 2px !important;
 }
 
-/* Portal marker styles */
-.portal-marker {
-  background: transparent !important;
-  border: none !important;
-}
-
-.portal-wrapper {
-  position: relative;
-  width: 30px;
-  height: 30px;
-}
-
-.portal-icon {
-  width: 30px;
-  height: 30px;
-  background: white;
-  border: 2px solid #3b82f6;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 2;
-  cursor: pointer;
-  /* Better touch target for mobile */
-  min-width: 44px;
-  min-height: 44px;
-}
-
-.portal-pulse {
-  position: absolute;
-  top: -10px;
-  left: -10px;
-  width: 50px;
-  height: 50px;
-  background: rgba(59, 130, 246, 0.2);
-  border-radius: 50%;
-  animation: portalPulse 2s infinite;
-  z-index: 1;
-}
-
-/* User location marker styles */
-.user-location-marker {
-  background: transparent !important;
-  border: none !important;
-  z-index: 1000 !important;
-}
-
-.user-location-wrapper {
-  position: relative;
-  width: 24px;
-  height: 24px;
-}
-
-.user-location-dot {
-  width: 24px;
-  height: 24px;
-  background: #29f205;
-  border: 3px solid white;
-  border-radius: 50%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 1002;
-}
-
-.user-location-pulse {
-  position: absolute;
-  top: -15px;
-  left: -15px;
-  width: 54px;
-  height: 54px;
-  background: rgba(148, 248, 54, 0.2);
-  border-radius: 50%;
-  animation: userLocationPulse 2s infinite;
-  z-index: 1001;
-}
-
-@keyframes portalPulse {
-  0% {
-    transform: scale(0.8);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1.5);
-    opacity: 0;
-  }
-}
-
-@keyframes userLocationPulse {
-  0% {
-    transform: scale(0.8);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1.5);
-    opacity: 0;
-  }
-}
-
 /* Mobile-specific enhancements */
 @media (max-width: 768px) {
   .leaflet-control-zoom a {
@@ -177,13 +72,6 @@ body {
     width: 30px !important;
     height: 30px !important;
     font-size: 20px !important;
-  }
-  
-  /* IMPROVED: Better portal touch targets on mobile */
-  .portal-icon {
-    min-width: 44px !important;
-    min-height: 44px !important;
-    margin: -7px; /* Center the larger touch target */
   }
 }
 
@@ -267,4 +155,9 @@ body {
 
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
+}
+
+.portal-button-center {
+  left: 50% !important;
+  transform: translateX(-50%) !important;
 }
