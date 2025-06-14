@@ -13,7 +13,7 @@ export default defineConfig({
         name: 'Portal - Location Chat',
         short_name: 'Portal',
         description:
-          'Share your location to open a chat portal and connect with people nearby',
+          'Share your coordinates once to open a chat portal and connect with people nearby',
         theme_color: '#000000',
         background_color: '#ffffff',
         display: 'standalone',

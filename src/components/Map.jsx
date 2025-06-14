@@ -521,7 +521,7 @@ export default function Map() {
       <MapContainer
         key={`${mapCenter[0]}-${mapCenter[1]}`} // Force re-render when center changes
         center={mapCenter}
-        zoom={13}
+        zoom={17}
         style={{ height: "100%", width: "100%" }}
         zoomControl={false}
         attributionControl={true}
