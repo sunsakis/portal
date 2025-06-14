@@ -38,7 +38,9 @@ class Ident {
     }
     
     async decrypt(message: any) {
-        return EthCrypto.decryptWithPrivateKey(this.privateKey, message as Encrypted);
+        console.log(this.privateKey);
+        console.log(this.publicKey);
+        return EthCrypto.decryptWithPrivateKey(this.privateKey.replace(/^0x/, ""), message as Encrypted);
     }
 
 

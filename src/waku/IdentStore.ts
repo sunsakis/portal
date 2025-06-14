@@ -31,7 +31,7 @@ class IdentStore {
         const messageSig = await masterIdent.signMessage(message);
 
         const payload = message + LES_BE_FREN_SIG_PREFIX + messageSig;
-        const encryptedIdent = await EthCrypto.encryptWithPublicKey(wannabeFrenPortalKey, payload);
+        const encryptedIdent = await EthCrypto.encryptWithPublicKey(wannabeFrenPortalKey.replace(/^0x/, ""), payload);
         return portalId + LES_BE_FREN_PORTAL_ID_PREFIX + encryptedIdent;
     }
 
@@ -46,7 +46,7 @@ class IdentStore {
         const [message, messageSig] = decryptedRequest.split(LES_BE_FREN_SIG_PREFIX);
 
         const frenNik = message.split(LES_BE_FREN_MESSAGE)[1];
-        
+
         const frenPublicKey = EthCrypto.recoverPublicKey(
             messageSig,
             EthCrypto.hash.keccak256(message)
