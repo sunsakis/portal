@@ -14,6 +14,79 @@ import 'leaflet/dist/leaflet.css'
 import 'leaflet-defaulticon-compatibility'
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css'
 
+// UX-friendly error toast component
+const ErrorToast = ({ error, onDismiss }) => {
+  if (!error) return null
+
+  const getErrorConfig = (errorMsg) => {
+    if (errorMsg.includes('only') && errorMsg.includes('away')) {
+      return {
+        icon: '📍',
+        title: 'Too Close to Another Portal',
+        message: errorMsg,
+        color: 'bg-orange-500',
+        suggestion: 'Try moving at least 10 meters away from other portals'
+      }
+    }
+    
+    if (errorMsg.includes('GPS') || errorMsg.includes('location')) {
+      return {
+        icon: '🛰️',
+        title: 'Location Issue',
+        message: errorMsg,
+        color: 'bg-red-500',
+        suggestion: 'Make sure location services are enabled and try moving outdoors'
+      }
+    }
+    
+    if (errorMsg.includes('network') || errorMsg.includes('connection')) {
+      return {
+        icon: '📡',
+        title: 'Connection Problem',
+        message: errorMsg,
+        color: 'bg-blue-500',
+        suggestion: 'Check your internet connection and try again'
+      }
+    }
+    
+    return {
+      icon: '⚠️',
+      title: 'Portal Creation Failed',
+      message: errorMsg,
+      color: 'bg-gray-500',
+      suggestion: 'Please try again in a moment'
+    }
+  }
+
+  const config = getErrorConfig(error)
+
+  return (
+    <motion.div
+      initial={{ y: -100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: -100, opacity: 0 }}
+      className={`fixed top-4 left-4 right-4 ${config.color} text-white rounded-lg shadow-xl z-[2000] mx-auto max-w-sm`}
+    >
+      <div className="p-4">
+        <div className="flex items-start gap-3">
+          <span className="text-2xl flex-shrink-0">{config.icon}</span>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-sm mb-1">{config.title}</h3>
+            <p className="text-sm opacity-90 mb-2">{config.message}</p>
+            <p className="text-xs opacity-75">{config.suggestion}</p>
+          </div>
+          <button
+            onClick={onDismiss}
+            className="text-white/60 hover:text-white text-lg leading-none"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 export default function Map() {
   const { user, signInAnonymously } = useLocalAuth()
   const { error: geoError, getCurrentLocation, location: userLocation } = useGeolocation()
@@ -23,6 +96,7 @@ export default function Map() {
   const [showChatPortal, setShowChatPortal] = useState(false)
   const [isPlacingPin, setIsPlacingPin] = useState(false)
   const [wakuStatus, setWakuStatus] = useState('connecting')
+  const [portalError, setPortalError] = useState(null) // UX-friendly error state
   
   // ALWAYS VISIBLE Debug Console for Mobile Testing
   const [debugInfo, setDebugInfo] = useState([])
@@ -167,11 +241,22 @@ export default function Map() {
     console.log('Chat state - Show chat:', showChatPortal)
   }, [selectedPortal?.id, showChatPortal])
 
+  // Auto-dismiss error after 8 seconds
+  useEffect(() => {
+    if (portalError) {
+      const timer = setTimeout(() => {
+        setPortalError(null)
+      }, 8000)
+      return () => clearTimeout(timer)
+    }
+  }, [portalError])
+
   const handleCreatePortal = async () => {
     if (!user || isPlacingPin) return
 
     addDebugLog('Creating Supabase portal...', 'info')
     setIsPlacingPin(true)
+    setPortalError(null) // Clear any previous errors
 
     try {
       addDebugLog('Requesting GPS location...', 'info')
@@ -182,6 +267,7 @@ export default function Map() {
 
       if (error) {
         addDebugLog(`Supabase portal creation failed: ${error}`, 'error')
+        setPortalError(error) // Show UX-friendly error
       } else {
         addDebugLog(`Supabase portal created: ${data.id}`, 'success')
         addDebugLog('Portal saved to database...', 'info')
@@ -189,6 +275,7 @@ export default function Map() {
     } catch (err) {
       const errorMsg = err.message || err.toString()
       addDebugLog(`GPS error: ${errorMsg}`, 'error')
+      setPortalError(errorMsg) // Show UX-friendly error
     } finally {
       setIsPlacingPin(false)
     }
@@ -196,9 +283,12 @@ export default function Map() {
 
   const handleClosePortal = async () => {
     addDebugLog('Closing Supabase portal...', 'info')
+    setPortalError(null) // Clear any errors
+    
     const { error } = await closePortal()
     if (error) {
       addDebugLog(`Close failed: ${error}`, 'error')
+      setPortalError(error) // Show UX-friendly error
     } else {
       addDebugLog('Portal closed successfully', 'success')
     }
@@ -229,6 +319,14 @@ export default function Map() {
 
   return (
     <div className="relative h-screen w-full overflow-hidden">
+      {/* UX-Friendly Error Toast */}
+      <AnimatePresence>
+        <ErrorToast 
+          error={portalError} 
+          onDismiss={() => setPortalError(null)} 
+        />
+      </AnimatePresence>
+
       {/* Connection Status */}
       <ConnectionStatus 
         connectionStatus={connectionStatus === 'connected' ? 'connected' : connectionStatus === 'connecting' ? 'connecting' : 'error'}
@@ -275,6 +373,7 @@ export default function Map() {
                 <div>Chat: {showChatPortal ? '💬' : '⚪'}</div>
                 <div>Supabase: {connectionStatus === 'connected' ? '🟢' : connectionStatus === 'connecting' ? '🟡' : '🔴'}</div>
                 <div>Waku: {wakuStatus === 'connected' ? '🟢' : wakuStatus === 'connecting' ? '🟡' : '🔴'}</div>
+                <div>Error: {portalError ? '🔴' : '🟢'}</div>
               </div>
               <div className="mt-1 text-xs text-gray-300">
                 Mode: SUPABASE PORTALS + WAKU MESSAGES
@@ -285,6 +384,11 @@ export default function Map() {
               {selectedPortal && (
                 <div className="text-xs text-yellow-300 mt-1">
                   Chat Portal: {selectedPortal.id}
+                </div>
+              )}
+              {portalError && (
+                <div className="text-xs text-red-300 mt-1 truncate">
+                  Error: {portalError.slice(0, 30)}...
                 </div>
               )}
             </div>
@@ -338,6 +442,26 @@ export default function Map() {
                   className="text-xs bg-orange-600 px-2 py-1 rounded flex-1"
                 >
                   Close Chat
+                </button>
+              </div>
+              <div className="flex gap-1 mb-1">
+                <button
+                  onClick={() => {
+                    setPortalError(null)
+                    addDebugLog('Cleared portal error', 'info')
+                  }}
+                  className="text-xs bg-yellow-600 px-2 py-1 rounded flex-1"
+                >
+                  Clear Error
+                </button>
+                <button
+                  onClick={() => {
+                    setPortalError('Test error: Another portal is only 8.3m away. Portals must be at least 10m apart for privacy.')
+                    addDebugLog('Testing error toast', 'info')
+                  }}
+                  className="text-xs bg-red-600 px-2 py-1 rounded flex-1"
+                >
+                  Test Error
                 </button>
               </div>
               <button

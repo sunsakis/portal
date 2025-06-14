@@ -207,7 +207,7 @@ export const useGeolocation = () => {
   return { location, error, loading, getCurrentLocation }
 }
 
-// Absolute minimal portal management - just coordinates
+// Portal management with server-side proximity checking
 export const useLocalPortals = (user) => {
   const [portals, setPortals] = useState([])
   const [userPortal, setUserPortal] = useState(null)
@@ -304,44 +304,42 @@ export const useLocalPortals = (user) => {
 
     try {
       setLoading(true)
-      console.log('Creating Supabase portal at:', location)
+      console.log('Creating Supabase portal with server-side proximity check at:', location)
       
-      // Delete any existing portals for this user (simple approach)
-      await supabase
-        .from('portals')
-        .delete()
-        .eq('user_id', user.id)
-      
-      // Create new portal
-      const { data, error } = await supabase
-        .from('portals')
-        .insert({
-          latitude: location.latitude,
-          longitude: location.longitude,
-          user_id: user.id
-        })
-        .select()
-        .single()
+      // Call the server-side proximity check function
+      console.log('Calling server-side proximity check function...')
+      const { data, error } = await supabase.rpc('check_portal_proximity_and_create', {
+        p_latitude: location.latitude,
+        p_longitude: location.longitude,
+        p_user_id: user.id
+      })
 
       if (error) {
-        console.error('Supabase portal creation failed:', error)
+        console.error('Supabase RPC error:', error)
         setLoading(false)
-        return { error: error.message }
+        return { error: error.message || 'Portal creation failed' }
       }
 
-      // Add generated ID for frontend compatibility
-      const portalWithId = {
-        ...data,
-        id: generatePortalId(data.latitude, data.longitude)
+      console.log('Server response:', data)
+
+      // Handle server response
+      if (!data.success) {
+        console.log(`Server rejected portal: ${data.message}`)
+        if (data.error === 'PROXIMITY_VIOLATION') {
+          console.log(`Distance to nearest portal: ${data.distance}m`)
+        }
+        setLoading(false)
+        return { error: data.message }
       }
 
-      console.log('Supabase portal created at:', `${data.latitude}, ${data.longitude}`)
+      // Success - portal created with server-side validation
+      console.log('Server-side portal creation successful:', data.data)
       
-      // Refresh portals list
+      // Refresh portals list to show the new portal
       await fetchPortals()
       
       setLoading(false)
-      return { data: portalWithId, error: null }
+      return { data: data.data, error: null }
       
     } catch (err) {
       console.error('Portal creation failed:', err)
