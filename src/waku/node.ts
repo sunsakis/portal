@@ -47,6 +47,11 @@ const PortalMessageDataPacket = new protobuf.Type('PortalMessageDataPacket')
   .add(new protobuf.Field('timestamp', 2, 'uint64'))
   .add(new protobuf.Field('message', 3, 'string'));
 
+const FriendRequestDataPacket = new protobuf.Type('PortalMessageDataPacket')
+  .add(new protobuf.Field('portalId', 1, 'string'))
+  .add(new protobuf.Field('timestamp', 2, 'uint64'))
+  .add(new protobuf.Field('message', 3, 'string'));
+
 export interface PortalMessage {
   portalId: string;
   timestamp: number;
@@ -78,9 +83,17 @@ export const createWakuNode = async () => {
     },
     autoStart: true,
     numPeersToUse: 2,
+    store: {
+      peer:
+        '/dns4/store-01.do-ams3.status.prod.status.im/tcp/443/wss/p2p/16Uiu2HAmAUdrQ3uwzuE4Gy4D56hX6uLKEeerJAnhKEHZ3DxF1EfT',
+    },
   });
 
+  console.log('LIGHT NODE CREATED');
+
   await node.waitForPeers([Protocols.Filter, Protocols.LightPush, Protocols.Store]);
+
+  console.log('PEERS AWAITED');
 
   // await Promise.allSettled([
   //   node.dial(
@@ -92,47 +105,38 @@ export const createWakuNode = async () => {
   // ]);
   wakuNode = node;
   console.log(node.peerId);
-  let messages = [];
   try {
     node.store.queryWithOrderedCallback([portal_list_decoder], (msg) => {
-      console.log('------------------ decoded old msg', msg);
+      if (msg != null) {
+        const messageObj = PortalListDataPacket.decode(msg.payload);
+        portalList.push(messageObj as unknown as Portal);
+      }
     });
-    // const promises = wakuNode.store.queryGenerator([portal_list_decoder]);
 
-    // for await (const promise of promises) {
-    //   for (let p of promise) {
-    //     console.log('promise', p);
-    //   }
-    //   // const messagesRaw = await Promise.all(promise);
-    //   // console.log(messagesRaw);
-    //   // const filteredMessages = messagesRaw.filter(
-    //   //   (v) => !!v,
-    //   // );
-
-    //   // messages = [...messages, ...filteredMessages];
-    // }
+    node.store.queryWithOrderedCallback([portal_message_decoder], (msg) => {
+      if (msg != null) {
+        const messageObj = PortalMessageDataPacket.decode(
+          msg.payload,
+        ) as unknown as PortalMessage;
+        if (Array.isArray(portalMessages[messageObj.portalId])) {
+          portalMessages[messageObj.portalId].push(messageObj);
+        } else {
+          portalMessages[messageObj.portalId] = [messageObj];
+        }
+      }
+    });
   } catch (e) {
     console.error(e);
   }
-  console.log('OLD', messages);
+
   await waku_SubToPortals();
   await waku_SubToMessages();
   console.log('Waku sub started ....');
-
-  await waku_CreatePortal(0, 0);
 
   setInterval(async () => {
     console.log(portalList);
     console.log(portalMessages);
   }, 3000);
-
-  setInterval(async () => {
-    await waku_SendPortalMessage({
-      portalId: '0,0',
-      timestamp: Date.now(),
-      message: Math.random().toString(),
-    });
-  }, 5000);
 };
 
 const waku_SubToPortals = async () => {
@@ -142,10 +146,14 @@ const waku_SubToPortals = async () => {
     const messageObj = PortalListDataPacket.decode(wakuMessage.payload);
     portalList.push(messageObj as unknown as Portal);
   };
-  await wakuNode.nextFilter.subscribe(
-    portal_list_decoder,
-    callback,
-  );
+  try {
+    await wakuNode.nextFilter.subscribe(
+      portal_list_decoder,
+      callback,
+    );
+  } catch (e) {
+    console.error('Sub error to portals:', e);
+  }
 };
 
 const waku_SubToMessages = async () => {
@@ -161,10 +169,14 @@ const waku_SubToMessages = async () => {
       portalMessages[messageObj.portalId] = [messageObj];
     }
   };
-  await wakuNode.nextFilter.subscribe(
-    portal_message_decoder,
-    callback,
-  );
+  try {
+    await wakuNode.nextFilter.subscribe(
+      portal_message_decoder,
+      callback,
+    );
+  } catch (e) {
+    console.error('Portal messages sub error: ', e);
+  }
 };
 
 export const waku_CreatePortal = async (x: number, y: number) => {
@@ -200,10 +212,6 @@ export const waku_SendPortalMessage = async (message: PortalMessage) => {
 
 const waku_SubToOwnChannel = () => {
   const peerId = wakuNode.peerId.toString();
-  const portal_message_encoder = createEncoder({
-    contentTopic: `/${peerId}_${TOPIC_PRIVATE_CHANNEL}`,
-    pubsubTopicShardInfo: { clusterId: CLUSTER_ID, shard: SHARD_ID },
-  });
   const portal_message_decoder = createDecoder(TOPIC_PORTALS_MESSAGE, {
     clusterId: CLUSTER_ID,
     shard: SHARD_ID,
