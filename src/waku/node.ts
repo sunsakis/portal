@@ -14,9 +14,8 @@ export const BOOTSTRAP_PEERS = [
   '/dns4/boot-01.ac-cn-hongkong-c.status.prod.status.im/tcp/443/wss/p2p/16Uiu2HAmGwcE8v7gmJNEWFtZtojYpPMTHy2jBLL6xRk33qgDxFWX',
 ];
 
-export const CLUSTER_ID = 16;
-export const SHARD_ID = 32;
-export const PUBSUB_TOPIC = `/waku/2/rs/${CLUSTER_ID}/${SHARD_ID}`;
+export const CLUSTER_ID = 42;
+export const SHARD_ID = 1;
 
 const portal_list_encoder = createEncoder({
   contentTopic: TOPIC_PORTALS_LIST,
@@ -74,7 +73,6 @@ export const createWakuNode = async () => {
       clusterId: CLUSTER_ID,
       shards: [SHARD_ID],
     },
-    bootstrapPeers: BOOTSTRAP_PEERS,
     defaultBootstrap: false,
     discovery: {
       dns: false,
@@ -83,15 +81,20 @@ export const createWakuNode = async () => {
     },
     autoStart: true,
     numPeersToUse: 2,
-    store: {
-      peer:
-        '/dns4/store-01.do-ams3.status.prod.status.im/tcp/443/wss/p2p/16Uiu2HAmAUdrQ3uwzuE4Gy4D56hX6uLKEeerJAnhKEHZ3DxF1EfT',
-    },
   });
+
+  await Promise.allSettled([
+    node.dial(
+      '/dns4/waku-test.bloxy.one/tcp/8095/wss/p2p/16Uiu2HAmSZbDB7CusdRhgkD81VssRjQV5ZH13FbzCGcdnbbh6VwZ',
+    ),
+    node.dial(
+      '/dns4/vps-aaa00d52.vps.ovh.ca/tcp/8000/wss/p2p/16Uiu2HAm9PftGgHZwWE3wzdMde4m3kT2eYJFXLZfGoSED3gysofk',
+    ),
+  ]);
 
   console.log('LIGHT NODE CREATED');
 
-  await node.waitForPeers([Protocols.Filter, Protocols.LightPush, Protocols.Store]);
+  await node.waitForPeers([Protocols.Filter, Protocols.LightPush]);
 
   console.log('PEERS AWAITED');
 
@@ -104,30 +107,29 @@ export const createWakuNode = async () => {
   //   ),
   // ]);
   wakuNode = node;
-  console.log(node.peerId);
-  try {
-    node.store.queryWithOrderedCallback([portal_list_decoder], (msg) => {
-      if (msg != null) {
-        const messageObj = PortalListDataPacket.decode(msg.payload);
-        portalList.push(messageObj as unknown as Portal);
-      }
-    });
+  // try {
+  //   node.store.queryWithOrderedCallback([portal_list_decoder], (msg) => {
+  //     if (msg != null) {
+  //       const messageObj = PortalListDataPacket.decode(msg.payload);
+  //       portalList.push(messageObj as unknown as Portal);
+  //     }
+  //   });
 
-    node.store.queryWithOrderedCallback([portal_message_decoder], (msg) => {
-      if (msg != null) {
-        const messageObj = PortalMessageDataPacket.decode(
-          msg.payload,
-        ) as unknown as PortalMessage;
-        if (Array.isArray(portalMessages[messageObj.portalId])) {
-          portalMessages[messageObj.portalId].push(messageObj);
-        } else {
-          portalMessages[messageObj.portalId] = [messageObj];
-        }
-      }
-    });
-  } catch (e) {
-    console.error(e);
-  }
+  //   node.store.queryWithOrderedCallback([portal_message_decoder], (msg) => {
+  //     if (msg != null) {
+  //       const messageObj = PortalMessageDataPacket.decode(
+  //         msg.payload,
+  //       ) as unknown as PortalMessage;
+  //       if (Array.isArray(portalMessages[messageObj.portalId])) {
+  //         portalMessages[messageObj.portalId].push(messageObj);
+  //       } else {
+  //         portalMessages[messageObj.portalId] = [messageObj];
+  //       }
+  //     }
+  //   });
+  // } catch (e) {
+  //   console.error(e);
+  // }
 
   await waku_SubToPortals();
   await waku_SubToMessages();
