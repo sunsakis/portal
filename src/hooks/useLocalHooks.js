@@ -265,8 +265,6 @@ export const useLocalPortals = (user) => {
         latitude: location.latitude,
         longitude: location.longitude,
         accuracy: location.accuracy || 100,
-        title: 'Chat Portal',
-        description: 'Available for chat',
         is_active: true,
         created_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours

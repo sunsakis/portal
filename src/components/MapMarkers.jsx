@@ -35,8 +35,8 @@ const getFontSizeForZoom = (zoom) => {
 
 // Create smoothly scaling portal icon with CSS transforms
 export const createPortalIcon = (isUserPortal = false, zoom = 13) => {
-  const emoji = '🟢' // Only green circle for all portals
-  const pulseColor = isUserPortal ? 'rgba(34, 197, 94, 0.4)' : 'rgba(59, 130, 246, 0.3)'
+  const emoji = '🟢'
+  const pulseColor = 'rgba(34, 197, 94, 0.4)'
   
   const markerSize = getMarkerSizeForZoom(zoom)
   const pulseSize = getPulseSizeForZoom(zoom)
@@ -296,26 +296,6 @@ const PortalMarkerItem = React.memo(({ portal, zoom, onClick }) => {
         click: onClick
       }}
     >
-      <Popup>
-        <div className="p-2">
-          <strong className="block text-sm mb-1">{portal.title}</strong>
-          <span className="text-xs text-gray-600 block mb-2">{portal.description}</span>
-          <div className="text-xs text-gray-500 mb-2">
-            <div>Range: ~50m radius</div>
-            <div>Zoom: {zoom.toFixed(1)} • Scale: {(getMarkerSizeForZoom(zoom) / 30).toFixed(2)}x</div>
-          </div>
-          <button 
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              onClick(e)
-            }}
-            className="bg-blue-500 text-white px-3 py-1 rounded text-xs hover:bg-blue-600 transition-colors"
-          >
-            Join Chat
-          </button>
-        </div>
-      </Popup>
     </Marker>
   )
 })
