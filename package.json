@@ -21,7 +21,8 @@
   "dependencies": {
     "@maptiler/leaflet-maptilersdk": "^2.0.0",
     "@use-gesture/react": "^10.3.1",
-    "@waku/sdk": "0.0.32-4997440.0",
+    "@waku/sdk": "0.0.32-01af155.0",
+    "@waku/interfaces": "0.0.31-01af155.0",
     "framer-motion": "^11.11.1",
     "leaflet": "^1.9.4",
     "leaflet-defaulticon-compatibility": "^0.1.2",

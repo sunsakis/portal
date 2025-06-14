@@ -4,8 +4,8 @@ import protobuf from 'protobufjs';
 
 let wakuNode: LightNode;
 
-export const TOPIC_PORTALS_LIST = '/PORTALS_LIST/1/message/proto';
-export const TOPIC_PORTALS_MESSAGE = '/PORTALS_MESSAGE/1/message/proto';
+export const TOPIC_PORTALS_LIST = '/PORTALS_LIST2/1/message/proto';
+export const TOPIC_PORTALS_MESSAGE = '/PORTALS_MESSAGE2/1/message/proto';
 export const TOPIC_PRIVATE_CHANNEL = 'PRIVATE_CHANNEL/1/message/proto';
 
 export const BOOTSTRAP_PEERS = [
@@ -147,10 +147,12 @@ const waku_SubToPortals = async () => {
     portalList.push(messageObj as unknown as Portal);
   };
   try {
+    console.log('Subbing to Portals');
     await wakuNode.nextFilter.subscribe(
       portal_list_decoder,
       callback,
     );
+    console.log('Subbing to Portals SUCCESS');
   } catch (e) {
     console.error('Sub error to portals:', e);
   }
@@ -192,6 +194,7 @@ export const waku_CreatePortal = async (x: number, y: number) => {
     await wakuNode.lightPush.send(portal_list_encoder, {
       payload: serialisedMessage,
     });
+    console.log('...... Portal created .....');
   } catch (e) {
     console.error('Error creating portal:', e);
   }
