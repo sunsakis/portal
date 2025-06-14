@@ -8,7 +8,8 @@ const FREN_IDENTS_KEY = 'live.portal.frens';
 const PORTAL_IDENTS_KEY = 'live.portal.portalIdents';
 
 const LES_BE_FREN_MESSAGE = "Lesbe Frens! I'm ";
-const LES_BE_FREN_SIG_PREFIX = "BBB";
+const LES_BE_FREN_SIG_PREFIX = "SSS";
+const LES_BE_FREN_PORTAL_ID_PREFIX = "PPP";
 
 
 // TODO: add safePersistence edits, and call them on add 
@@ -24,27 +25,32 @@ class IdentStore {
         this._loadPortalIdents();
     }
 
-    async lesBeFrens(myNik: string, wannabeFrenPortalKey: Hex): Promise<Encrypted> {
+    async lesBeFrens(myNik: string, wannabeFrenPortalKey: Hex, portalId: `${string},${string}`): Promise<string> {
         const masterIdent = this.getMasterIdent();
         const message = LES_BE_FREN_MESSAGE + myNik;
         const messageSig = await masterIdent.signMessage(message);
 
         const payload = message + LES_BE_FREN_SIG_PREFIX + messageSig;
         const encryptedIdent = await EthCrypto.encryptWithPublicKey(wannabeFrenPortalKey, payload);
-        return encryptedIdent;
+        return portalId + LES_BE_FREN_PORTAL_ID_PREFIX + encryptedIdent;
     }
 
-    async hooWanaBeFrens(lesBeFrensRequest: Hex): Promise<Fren> {
-        const decryptedRequest = await this.masterIdent.decrypt(lesBeFrensRequest);
-        const payload = decryptedRequest.split(LES_BE_FREN_SIG_PREFIX);
-        const message = payload[0];
-        const messageSig = payload[1];
+    async hooWanaBeFrens(lesBeFrensRequest: Hex): Promise<Fren|undefined> {
+        const [portalId, encryptedRequest] = lesBeFrensRequest.split(LES_BE_FREN_PORTAL_ID_PREFIX);
+        const portalIdent = this.getPortalIdent(portalId as `${string},${string}`);
+        if (!portalIdent) {
+            return undefined;
+        }
 
+        const decryptedRequest = await portalIdent.decrypt(encryptedRequest);
+        const [message, messageSig] = decryptedRequest.split(LES_BE_FREN_SIG_PREFIX);
+
+        const frenNik = message.split(LES_BE_FREN_MESSAGE)[1];
+        
         const frenPublicKey = EthCrypto.recoverPublicKey(
             messageSig,
             EthCrypto.hash.keccak256(message)
         );
-        const frenNik = message.split(LES_BE_FREN_MESSAGE)[1];
 
         const fren = new Fren(frenPublicKey as Hex, frenNik);
 
