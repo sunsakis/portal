@@ -1,10 +1,16 @@
 import { useEffect, useState, useCallback } from 'react'
+import { supabase } from '../supabase/portals'
 import { 
-  portalList, 
   portalMessages, 
-  waku_CreatePortal, 
   waku_SendPortalMessage 
 } from '../waku/node'
+
+// Generate portal ID from coordinates for Waku compatibility
+const generatePortalId = (latitude, longitude) => {
+  const x = Math.round(latitude * 1000000)
+  const y = Math.round(longitude * 1000000)
+  return `${x},${y}`
+}
 
 // Simple local user management - no external auth needed
 export const useLocalAuth = () => {
@@ -201,74 +207,85 @@ export const useGeolocation = () => {
   return { location, error, loading, getCurrentLocation }
 }
 
-// Convert coordinates to fixed integers for Waku compatibility
-const coordsToInt = (coord) => {
-  return Math.round(coord * 1000000) // 6 decimal precision
-}
-
-const intToCoords = (intCoord) => {
-  return intCoord / 1000000
-}
-
-// Waku-powered portal management
+// Absolute minimal portal management - just coordinates
 export const useLocalPortals = (user) => {
   const [portals, setPortals] = useState([])
   const [userPortal, setUserPortal] = useState(null)
   const [loading, setLoading] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState('connecting')
 
-  // Monitor Waku portal list for updates
+  // Fetch all portals from Supabase
+  const fetchPortals = useCallback(async () => {
+    try {
+      console.log('Fetching portals from Supabase...')
+      
+      const { data, error } = await supabase
+        .from('portals')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Supabase portal fetch error:', error)
+        setConnectionStatus('error')
+        return
+      }
+
+      console.log(`Fetched ${data.length} portals from Supabase`)
+      
+      // Add frontend compatibility fields
+      const formattedPortals = data.map(portal => ({
+        ...portal,
+        id: generatePortalId(portal.latitude, portal.longitude), // Generate ID for frontend compatibility
+        profiles: {
+          username: portal.user_id === user?.id ? 'You' : 'Anonymous',
+          avatar_url: null
+        }
+      }))
+      
+      setPortals(formattedPortals)
+      
+      // Find user's portal
+      const myPortal = formattedPortals.find(p => p.user_id === user?.id)
+      setUserPortal(myPortal || null)
+      
+      setConnectionStatus('connected')
+      
+    } catch (err) {
+      console.error('Error fetching portals:', err)
+      setConnectionStatus('error')
+    }
+  }, [user?.id])
+
+  // Monitor Supabase portals
   useEffect(() => {
     if (!user) return
 
-    console.log('Starting Waku portal monitoring for user:', user.id)
+    console.log('Starting Supabase portal monitoring for user:', user.id)
     
-    const updatePortals = () => {
-      try {
-        // Convert Waku portals to frontend format
-        const wakuPortals = portalList.map(portal => ({
-          id: portal.id,
-          user_id: portal.id.includes(user.id) ? user.id : `waku_user_${portal.id}`,
-          latitude: intToCoords(portal.x),
-          longitude: intToCoords(portal.y),
-          is_active: true,
-          created_at: new Date(portal.timestamp).toISOString(),
-          expires_at: new Date(portal.timestamp + 24 * 60 * 60 * 1000).toISOString(),
-          profiles: { 
-            username: portal.id.includes(user.id) ? 'You' : 'Anonymous',
-            avatar_url: null 
-          }
-        }))
-
-        // Filter out expired portals
-        const activePortals = wakuPortals.filter(portal => {
-          const expiresAt = new Date(portal.expires_at)
-          return expiresAt > new Date()
-        })
-
-        setPortals(activePortals)
-        
-        // Find user's portal
-        const myPortal = activePortals.find(p => p.user_id === user.id)
-        setUserPortal(myPortal || null)
-        
-        console.log(`Waku portals updated: ${activePortals.length} active portals`)
-        setConnectionStatus(activePortals.length > 0 ? 'connected' : 'connecting')
-        
-      } catch (err) {
-        console.error('Error processing Waku portals:', err)
-        setConnectionStatus('error')
-      }
+    // Initial fetch
+    fetchPortals()
+    
+    // Set up realtime subscription
+    const channel = supabase
+      .channel('portals_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'portals'
+      }, payload => {
+        console.log('Supabase portal change:', payload)
+        fetchPortals()
+      })
+      .subscribe()
+    
+    // Poll for updates every 10 seconds
+    const interval = setInterval(fetchPortals, 10000)
+    
+    return () => {
+      clearInterval(interval)
+      channel.unsubscribe()
     }
-
-    // Initial update
-    updatePortals()
-    
-    // Poll for updates every 2 seconds
-    const interval = setInterval(updatePortals, 2000)
-    
-    return () => clearInterval(interval)
-  }, [user])
+  }, [user, fetchPortals])
 
   const createPortal = async (location) => {
     if (!user) {
@@ -287,37 +304,47 @@ export const useLocalPortals = (user) => {
 
     try {
       setLoading(true)
-      console.log('Creating Waku portal at:', location)
+      console.log('Creating Supabase portal at:', location)
       
-      // Convert to integer coordinates for Waku
-      const x = coordsToInt(location.latitude)
-      const y = coordsToInt(location.longitude)
+      // Delete any existing portals for this user (simple approach)
+      await supabase
+        .from('portals')
+        .delete()
+        .eq('user_id', user.id)
       
-      // Create portal through Waku (using your original function)
-      await waku_CreatePortal(x, y)
-      
-      // Create local representation
-      const newPortal = {
-        id: `${x},${y}`,
-        user_id: user.id,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        accuracy: location.accuracy || 100,
-        is_active: true,
-        created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        profiles: { 
-          username: user.email?.split('@')[0] || 'Anonymous', 
-          avatar_url: null 
-        }
+      // Create new portal
+      const { data, error } = await supabase
+        .from('portals')
+        .insert({
+          latitude: location.latitude,
+          longitude: location.longitude,
+          user_id: user.id
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Supabase portal creation failed:', error)
+        setLoading(false)
+        return { error: error.message }
       }
 
-      console.log('Waku portal created successfully:', newPortal.id)
+      // Add generated ID for frontend compatibility
+      const portalWithId = {
+        ...data,
+        id: generatePortalId(data.latitude, data.longitude)
+      }
+
+      console.log('Supabase portal created at:', `${data.latitude}, ${data.longitude}`)
+      
+      // Refresh portals list
+      await fetchPortals()
+      
       setLoading(false)
-      return { data: newPortal, error: null }
+      return { data: portalWithId, error: null }
       
     } catch (err) {
-      console.error('Waku portal creation failed:', err)
+      console.error('Portal creation failed:', err)
       setLoading(false)
       return { error: err.message || 'Portal creation failed' }
     }
@@ -329,13 +356,25 @@ export const useLocalPortals = (user) => {
     }
 
     try {
-      console.log('Closing Waku portal:', userPortal.id)
+      console.log('Closing Supabase portal at:', `${userPortal.latitude}, ${userPortal.longitude}`)
       
-      // For now, we'll just remove from local state
-      // Your original Waku doesn't have a direct "delete" - portals expire naturally
-      setUserPortal(null)
+      // Simply delete the portal
+      const { error } = await supabase
+        .from('portals')
+        .delete()
+        .eq('latitude', userPortal.latitude)
+        .eq('longitude', userPortal.longitude)
+        .eq('user_id', user.id)
+
+      if (error) {
+        console.error('Portal close failed:', error)
+        return { error: error.message }
+      }
       
-      console.log('Portal closed successfully')
+      // Refresh portals list
+      await fetchPortals()
+      
+      console.log('Portal deleted successfully')
       return { error: null }
       
     } catch (err) {
@@ -354,7 +393,7 @@ export const useLocalPortals = (user) => {
   }
 }
 
-// Waku-powered message management for chat
+// Waku-powered message management for chat (unchanged)
 export const useLocalMessages = (portalId, user) => {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)

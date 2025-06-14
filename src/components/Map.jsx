@@ -8,7 +8,7 @@ import { UserPortalMarker, OtherPortalsMarkers } from './MapMarkers'
 import ChatPortal from './ChatPortal'
 import MapLayers from './MapLayers'
 import ConnectionStatus from './ConnectionStatus'
-// Remove getWakuStatus import since it doesn't exist in original waku/node.ts
+import { getWakuStatus } from '../waku/node'
 
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-defaulticon-compatibility'
@@ -31,15 +31,15 @@ export default function Map() {
   // Default fallback location (Berlin Prenzlauer Berg) - Privacy-friendly
   const berlinPrenzlauerBerg = { latitude: 52.5396, longitude: 13.4127 }
 
-  // Simple Waku status check without importing getWakuStatus
+  // Check Waku status periodically
   useEffect(() => {
     const checkWakuStatus = () => {
-      // Since we can't import getWakuStatus, we'll use a simple approach
-      // Check if we have portals from Waku network as a proxy for connection
-      if (portals.length > 0) {
-        setWakuStatus('connected')
-      } else {
-        setWakuStatus('connecting')
+      try {
+        const status = getWakuStatus()
+        setWakuStatus(status)
+      } catch (err) {
+        console.error('Error checking Waku status:', err)
+        setWakuStatus('error')
       }
     }
 
@@ -47,7 +47,7 @@ export default function Map() {
     const interval = setInterval(checkWakuStatus, 3000)
     
     return () => clearInterval(interval)
-  }, [portals.length])
+  }, [])
 
   // Calculate distance between two coordinates (Haversine formula)
   const calculateDistance = useCallback((lat1, lon1, lat2, lon2) => {
@@ -126,9 +126,9 @@ export default function Map() {
 
   // Initial debug info
   useEffect(() => {
-    addDebugLog('Portal app initialized with Waku P2P', 'info')
+    addDebugLog('Portal app initialized: Supabase + Waku hybrid', 'info')
     addDebugLog(`Environment: ${import.meta.env.DEV ? 'DEVELOPMENT' : 'PRODUCTION'}`, 'info')
-    addDebugLog('Privacy mode: Decentralized P2P + Local storage', 'success')
+    addDebugLog('Privacy: Supabase portals + Waku P2P messages', 'success')
   }, [addDebugLog])
 
   // Log map center changes (FIXED - only log when center actually changes)
@@ -147,14 +147,14 @@ export default function Map() {
 
   // Log connection status changes (FIXED - only console.log, no addDebugLog)
   useEffect(() => {
-    console.log(`Connection: ${connectionStatus} | Waku: ${wakuStatus}`)
+    console.log(`Supabase: ${connectionStatus} | Waku: ${wakuStatus}`)
   }, [connectionStatus, wakuStatus])
 
   // Log portal changes (FIXED - only console.log, no addDebugLog)
   useEffect(() => {
-    console.log(`Waku portals nearby: ${portals.length}`)
+    console.log(`Supabase portals nearby: ${portals.length}`)
     if (userPortal) {
-      console.log(`User portal active: ${userPortal.id.slice(0, 8)}...`)
+      console.log(`User portal active: ${userPortal.id}`)
     }
     if (closestPortal) {
       console.log(`Closest portal: ${closestPortal.distance.toFixed(1)}km away`)
@@ -170,7 +170,7 @@ export default function Map() {
   const handleCreatePortal = async () => {
     if (!user || isPlacingPin) return
 
-    addDebugLog('Creating Waku portal...', 'info')
+    addDebugLog('Creating Supabase portal...', 'info')
     setIsPlacingPin(true)
 
     try {
@@ -181,10 +181,10 @@ export default function Map() {
       const { data, error } = await createPortal(location)
 
       if (error) {
-        addDebugLog(`Waku portal creation failed: ${error}`, 'error')
+        addDebugLog(`Supabase portal creation failed: ${error}`, 'error')
       } else {
-        addDebugLog(`Waku portal created: ${data.id.slice(0, 8)}...`, 'success')
-        addDebugLog('Portal broadcasting to P2P network...', 'info')
+        addDebugLog(`Supabase portal created: ${data.id}`, 'success')
+        addDebugLog('Portal saved to database...', 'info')
       }
     } catch (err) {
       const errorMsg = err.message || err.toString()
@@ -195,7 +195,7 @@ export default function Map() {
   }
 
   const handleClosePortal = async () => {
-    addDebugLog('Closing Waku portal...', 'info')
+    addDebugLog('Closing Supabase portal...', 'info')
     const { error } = await closePortal()
     if (error) {
       addDebugLog(`Close failed: ${error}`, 'error')
@@ -206,7 +206,7 @@ export default function Map() {
 
   const handlePortalClick = (portal) => {
     console.log('Portal clicked:', portal)
-    addDebugLog(`Opening Waku chat for portal: ${portal.id.slice(0, 8)}...`, 'info')
+    addDebugLog(`Opening Waku chat for portal: ${portal.id}`, 'info')
     setSelectedPortal(portal)
     setShowChatPortal(true)
     
@@ -231,9 +231,9 @@ export default function Map() {
     <div className="relative h-screen w-full overflow-hidden">
       {/* Connection Status */}
       <ConnectionStatus 
-        connectionStatus={wakuStatus === 'connected' ? 'connected' : wakuStatus === 'connecting' ? 'connecting' : 'error'}
+        connectionStatus={connectionStatus === 'connected' ? 'connected' : connectionStatus === 'connecting' ? 'connecting' : 'error'}
         onRetry={() => {
-          addDebugLog('Manual refresh (Waku mode)', 'info')
+          addDebugLog('Manual refresh (Supabase + Waku mode)', 'info')
           window.location.reload()
         }}
       />
@@ -246,7 +246,7 @@ export default function Map() {
       >
         {/* Debug Header */}
         <div className="flex items-center justify-between p-2 bg-black/80 border-b border-gray-600 rounded-t-lg">
-          <h3 className="text-xs font-bold">🌀 Debug Console (WAKU P2P)</h3>
+          <h3 className="text-xs font-bold">🌀 Debug Console (SUPABASE + WAKU)</h3>
           <div className="flex gap-1">
             <button
               onClick={() => setDebugMinimized(!debugMinimized)}
@@ -273,17 +273,18 @@ export default function Map() {
                 <div>Nearby: {portals.length}</div>
                 <div>GPS: {userLocation ? '🟢' : '🔴'}</div>
                 <div>Chat: {showChatPortal ? '💬' : '⚪'}</div>
+                <div>Supabase: {connectionStatus === 'connected' ? '🟢' : connectionStatus === 'connecting' ? '🟡' : '🔴'}</div>
                 <div>Waku: {wakuStatus === 'connected' ? '🟢' : wakuStatus === 'connecting' ? '🟡' : '🔴'}</div>
               </div>
               <div className="mt-1 text-xs text-gray-300">
-                Mode: WAKU P2P NETWORK
+                Mode: SUPABASE PORTALS + WAKU MESSAGES
               </div>
               <div className="text-xs text-gray-300">
                 Center: {userLocation ? 'GPS' : closestPortal ? 'Portal' : 'Berlin'}
               </div>
               {selectedPortal && (
                 <div className="text-xs text-yellow-300 mt-1">
-                  Chat Portal: {selectedPortal.id.slice(0, 8)}...
+                  Chat Portal: {selectedPortal.id}
                 </div>
               )}
             </div>
@@ -351,7 +352,7 @@ export default function Map() {
             <div className="flex-1 overflow-y-auto p-2 max-h-48">
               <div className="text-xs space-y-1">
                 {debugInfo.length === 0 ? (
-                  <div className="text-gray-400">Waku console ready...</div>
+                  <div className="text-gray-400">Hybrid console ready...</div>
                 ) : (
                   debugInfo.slice(-8).map((log, i) => (
                     <div key={i} className={`p-1 rounded text-xs ${
@@ -386,7 +387,7 @@ export default function Map() {
               className="bg-white rounded-lg p-6 flex items-center gap-3 shadow-xl"
             >
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
-              <span className="font-medium">Creating Waku portal...</span>
+              <span className="font-medium">Creating Supabase portal...</span>
             </motion.div>
           </motion.div>
         )}
@@ -465,33 +466,33 @@ export default function Map() {
         ) : (
           <>
             <span className="text-xl">🌀</span>
-            <span>Open Waku Portal</span>
+            <span>Open Portal</span>
           </>
         )}
       </motion.button>
 
-      {/* Waku Status Indicator */}
+      {/* Hybrid Status Indicator */}
       <div className="fixed top-4 right-4 z-[1500]">
         <motion.div
           animate={{ 
-            scale: wakuStatus === 'connecting' ? [1, 1.2, 1] : 1,
-            opacity: wakuStatus === 'connected' ? 0.8 : 1
+            scale: (connectionStatus === 'connecting' || wakuStatus === 'connecting') ? [1, 1.2, 1] : 1,
+            opacity: (connectionStatus === 'connected' && wakuStatus === 'connected') ? 0.8 : 1
           }}
           transition={{ 
-            repeat: wakuStatus === 'connecting' ? Infinity : 0,
+            repeat: (connectionStatus === 'connecting' || wakuStatus === 'connecting') ? Infinity : 0,
             duration: 1.5 
           }}
           className={`px-3 py-1 rounded-full text-xs font-medium ${
-            wakuStatus === 'connected' 
+            connectionStatus === 'connected' && wakuStatus === 'connected'
               ? 'bg-green-500 text-white' 
-              : wakuStatus === 'connecting'
+              : (connectionStatus === 'connecting' || wakuStatus === 'connecting')
               ? 'bg-yellow-500 text-white'
               : 'bg-red-500 text-white'
           }`}
         >
-          {wakuStatus === 'connected' ? '🌀 P2P Connected' : 
-           wakuStatus === 'connecting' ? '🌀 Connecting...' : 
-           '🌀 P2P Offline'}
+          {connectionStatus === 'connected' && wakuStatus === 'connected' ? '🌀 Hybrid Online' : 
+           (connectionStatus === 'connecting' || wakuStatus === 'connecting') ? '🌀 Connecting...' : 
+           '🌀 Hybrid Offline'}
         </motion.div>
       </div>
     </div>

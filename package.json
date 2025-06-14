@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@maptiler/leaflet-maptilersdk": "^2.0.0",
+    "@supabase/supabase-js": "^2.45.4",
     "@use-gesture/react": "^10.3.1",
     "@waku/sdk": "0.0.32-01af155.0",
     "framer-motion": "^11.11.1",
