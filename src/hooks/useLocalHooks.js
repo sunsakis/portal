@@ -1,4 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
+import { 
+  portalList, 
+  portalMessages, 
+  waku_CreatePortal, 
+  waku_SendPortalMessage 
+} from '../waku/node'
 
 // Simple local user management - no external auth needed
 export const useLocalAuth = () => {
@@ -195,52 +201,73 @@ export const useGeolocation = () => {
   return { location, error, loading, getCurrentLocation }
 }
 
-// Local portal management with localStorage persistence
+// Convert coordinates to fixed integers for Waku compatibility
+const coordsToInt = (coord) => {
+  return Math.round(coord * 1000000) // 6 decimal precision
+}
+
+const intToCoords = (intCoord) => {
+  return intCoord / 1000000
+}
+
+// Waku-powered portal management
 export const useLocalPortals = (user) => {
   const [portals, setPortals] = useState([])
   const [userPortal, setUserPortal] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [connectionStatus, setConnectionStatus] = useState('connected') // Always connected in local mode
+  const [connectionStatus, setConnectionStatus] = useState('connecting')
 
-  // Load portals from localStorage on mount
+  // Monitor Waku portal list for updates
   useEffect(() => {
     if (!user) return
 
-    const loadPortals = () => {
+    console.log('Starting Waku portal monitoring for user:', user.id)
+    
+    const updatePortals = () => {
       try {
-        const savedPortals = localStorage.getItem('portal_data')
-        if (savedPortals) {
-          const parsedPortals = JSON.parse(savedPortals)
-          
-          // Filter out expired portals
-          const activePortals = parsedPortals.filter(portal => {
-            const expiresAt = new Date(portal.expires_at)
-            return expiresAt > new Date() && portal.is_active
-          })
-          
-          setPortals(activePortals)
-          
-          // Find user's portal
-          const myPortal = activePortals.find(p => p.user_id === user.id)
-          setUserPortal(myPortal || null)
-          
-          // Save cleaned portals back to localStorage
-          localStorage.setItem('portal_data', JSON.stringify(activePortals))
-          
-          console.log(`Loaded ${activePortals.length} active portals`)
-        }
+        // Convert Waku portals to frontend format
+        const wakuPortals = portalList.map(portal => ({
+          id: portal.id,
+          user_id: portal.id.includes(user.id) ? user.id : `waku_user_${portal.id}`,
+          latitude: intToCoords(portal.x),
+          longitude: intToCoords(portal.y),
+          is_active: true,
+          created_at: new Date(portal.timestamp).toISOString(),
+          expires_at: new Date(portal.timestamp + 24 * 60 * 60 * 1000).toISOString(),
+          profiles: { 
+            username: portal.id.includes(user.id) ? 'You' : 'Anonymous',
+            avatar_url: null 
+          }
+        }))
+
+        // Filter out expired portals
+        const activePortals = wakuPortals.filter(portal => {
+          const expiresAt = new Date(portal.expires_at)
+          return expiresAt > new Date()
+        })
+
+        setPortals(activePortals)
+        
+        // Find user's portal
+        const myPortal = activePortals.find(p => p.user_id === user.id)
+        setUserPortal(myPortal || null)
+        
+        console.log(`Waku portals updated: ${activePortals.length} active portals`)
+        setConnectionStatus(activePortals.length > 0 ? 'connected' : 'connecting')
+        
       } catch (err) {
-        console.error('Error loading portals:', err)
-        localStorage.removeItem('portal_data')
+        console.error('Error processing Waku portals:', err)
+        setConnectionStatus('error')
       }
     }
 
-    loadPortals()
+    // Initial update
+    updatePortals()
     
-    // Cleanup expired portals every 30 seconds
-    const cleanupInterval = setInterval(loadPortals, 30000)
+    // Poll for updates every 2 seconds
+    const interval = setInterval(updatePortals, 2000)
     
-    return () => clearInterval(cleanupInterval)
+    return () => clearInterval(interval)
   }, [user])
 
   const createPortal = async (location) => {
@@ -259,42 +286,39 @@ export const useLocalPortals = (user) => {
     }
 
     try {
+      setLoading(true)
+      console.log('Creating Waku portal at:', location)
+      
+      // Convert to integer coordinates for Waku
+      const x = coordsToInt(location.latitude)
+      const y = coordsToInt(location.longitude)
+      
+      // Create portal through Waku (using your original function)
+      await waku_CreatePortal(x, y)
+      
+      // Create local representation
       const newPortal = {
-        id: `portal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: `${x},${y}`,
         user_id: user.id,
         latitude: location.latitude,
         longitude: location.longitude,
         accuracy: location.accuracy || 100,
         is_active: true,
         created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         profiles: { 
           username: user.email?.split('@')[0] || 'Anonymous', 
           avatar_url: null 
         }
       }
 
-      // Get existing portals
-      const existingPortals = JSON.parse(localStorage.getItem('portal_data') || '[]')
-      
-      // Remove any existing portal by this user
-      const filteredPortals = existingPortals.filter(p => p.user_id !== user.id)
-      
-      // Add new portal
-      const updatedPortals = [newPortal, ...filteredPortals]
-      
-      // Save to localStorage
-      localStorage.setItem('portal_data', JSON.stringify(updatedPortals))
-      
-      // Update state
-      setPortals(updatedPortals)
-      setUserPortal(newPortal)
-      
-      console.log('Portal created successfully:', newPortal.id)
+      console.log('Waku portal created successfully:', newPortal.id)
+      setLoading(false)
       return { data: newPortal, error: null }
       
     } catch (err) {
-      console.error('Portal creation failed:', err)
+      console.error('Waku portal creation failed:', err)
+      setLoading(false)
       return { error: err.message || 'Portal creation failed' }
     }
   }
@@ -305,17 +329,10 @@ export const useLocalPortals = (user) => {
     }
 
     try {
-      // Get existing portals
-      const existingPortals = JSON.parse(localStorage.getItem('portal_data') || '[]')
+      console.log('Closing Waku portal:', userPortal.id)
       
-      // Remove user's portal
-      const updatedPortals = existingPortals.filter(p => p.user_id !== user.id)
-      
-      // Save to localStorage
-      localStorage.setItem('portal_data', JSON.stringify(updatedPortals))
-      
-      // Update state
-      setPortals(updatedPortals)
+      // For now, we'll just remove from local state
+      // Your original Waku doesn't have a direct "delete" - portals expire naturally
       setUserPortal(null)
       
       console.log('Portal closed successfully')
@@ -337,65 +354,79 @@ export const useLocalPortals = (user) => {
   }
 }
 
-// Local message management for chat
+// Waku-powered message management for chat
 export const useLocalMessages = (portalId, user) => {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
 
-  // Load messages for specific portal
+  // Monitor Waku messages for this portal
   useEffect(() => {
     if (!portalId || !user) {
       setMessages([])
       return
     }
 
-    try {
-      const savedMessages = localStorage.getItem('portal_messages')
-      if (savedMessages) {
-        const allMessages = JSON.parse(savedMessages)
-        const portalMessages = allMessages.filter(msg => msg.portal_id === portalId)
-        setMessages(portalMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)))
+    console.log('Starting Waku message monitoring for portal:', portalId)
+
+    const updateMessages = () => {
+      try {
+        // Get messages for this portal from Waku
+        const wakuMessages = portalMessages[portalId] || []
+        
+        // Convert to frontend format
+        const formattedMessages = wakuMessages.map(msg => ({
+          id: `${msg.timestamp}_${Math.random().toString(36).substr(2, 9)}`,
+          portal_id: portalId,
+          user_id: `waku_user_${msg.timestamp}`, // Simple user identification
+          content: msg.message,
+          message_type: 'text',
+          created_at: new Date(msg.timestamp).toISOString(),
+          profiles: {
+            username: `User_${msg.timestamp.toString().slice(-4)}`,
+            avatar_url: null
+          }
+        }))
+
+        // Sort by timestamp
+        const sortedMessages = formattedMessages.sort((a, b) => 
+          new Date(a.created_at) - new Date(b.created_at)
+        )
+
+        setMessages(sortedMessages)
+        console.log(`Waku messages updated: ${sortedMessages.length} messages for portal ${portalId}`)
+        
+      } catch (err) {
+        console.error('Error processing Waku messages:', err)
       }
-    } catch (err) {
-      console.error('Error loading messages:', err)
-      localStorage.removeItem('portal_messages')
     }
+
+    // Initial update
+    updateMessages()
+    
+    // Poll for updates every 1 second
+    const interval = setInterval(updateMessages, 1000)
+    
+    return () => clearInterval(interval)
   }, [portalId, user])
 
   const sendMessage = async (content) => {
     if (!content.trim() || !portalId || !user) return false
 
     try {
-      const newMessage = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        portal_id: portalId,
-        user_id: user.id,
-        content: content.trim(),
-        message_type: 'text',
-        created_at: new Date().toISOString(),
-        profiles: {
-          username: user.email?.split('@')[0] || 'Anonymous',
-          avatar_url: null
-        }
-      }
+      console.log('Sending Waku message:', content, 'to portal:', portalId)
+      
+      // Send through Waku
+      await waku_SendPortalMessage({
+        portalId: portalId,
+        timestamp: Date.now(),
+        message: content.trim()
+      })
 
-      // Get existing messages
-      const existingMessages = JSON.parse(localStorage.getItem('portal_messages') || '[]')
-      
-      // Add new message
-      const updatedMessages = [...existingMessages, newMessage]
-      
-      // Save to localStorage
-      localStorage.setItem('portal_messages', JSON.stringify(updatedMessages))
-      
-      // Update state
-      setMessages(prev => [...prev, newMessage])
-      
-      console.log('Message sent:', newMessage.id)
+      console.log('Waku message sent successfully')
       return true
       
     } catch (err) {
-      console.error('Message send failed:', err)
+      console.error('Waku message send failed:', err)
       return false
     }
   }
