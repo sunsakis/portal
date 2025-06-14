@@ -44,13 +44,13 @@ class Ident {
 
 class Fren {
     nik: string;
-
     publicKey: Hex;
     address: Address;
 
-    constructor(publicKey: Hex) {
+    constructor(publicKey: Hex, nik: string = "") {
         this.publicKey = publicKey;
         this.address = EthCrypto.publicKey.toAddress(this.publicKey) as Address;
+        this.nik = nik;
     }
 
 

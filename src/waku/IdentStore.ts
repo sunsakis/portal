@@ -7,6 +7,9 @@ const MASTER_IDENT_KEY = 'live.portal.portalKey';
 const FREN_IDENTS_KEY = 'live.portal.frens';
 const PORTAL_IDENTS_KEY = 'live.portal.portalIdents';
 
+const LES_BE_FREN_MESSAGE = "Lesbe Frens! I'm ";
+const LES_BE_FREN_SIG_PREFIX = "BBB";
+
 
 // TODO: add safePersistence edits, and call them on add 
 // TODO: prune portalIdents 
@@ -14,12 +17,40 @@ class IdentStore {
     masterIdent: Ident;
     portalIdents: Map<`${string},${string}`, Ident>;
     frens: Map<string, Fren>;
-    // HELPERS
+
     constructor() {
         this.masterIdent = new Ident(this._getKeyFromStorageOrGenerate());
         this._loadFrens();
+        this._loadPortalIdents();
     }
 
+    async lesBeFrens(myNik: string, wannabeFrenPortalKey: Hex): Promise<Encrypted> {
+        const masterIdent = this.getMasterIdent();
+        const message = LES_BE_FREN_MESSAGE + myNik;
+        const messageSig = await masterIdent.signMessage(message);
+
+        const payload = message + LES_BE_FREN_SIG_PREFIX + messageSig;
+        const encryptedIdent = await EthCrypto.encryptWithPublicKey(wannabeFrenPortalKey, payload);
+        return encryptedIdent;
+    }
+
+    async hooWanaBeFrens(lesBeFrensRequest: Hex): Promise<Fren> {
+        const decryptedRequest = await this.masterIdent.decrypt(lesBeFrensRequest);
+        const payload = decryptedRequest.split(LES_BE_FREN_SIG_PREFIX);
+        const message = payload[0];
+        const messageSig = payload[1];
+
+        const frenPublicKey = EthCrypto.recoverPublicKey(
+            messageSig,
+            EthCrypto.hash.keccak256(message)
+        );
+        const frenNik = message.split(LES_BE_FREN_MESSAGE)[1];
+
+        const fren = new Fren(frenPublicKey as Hex, frenNik);
+
+        return fren;
+    }
+    // GETTERS
     getMasterIdent(): Ident {
         return this.masterIdent;
     }
@@ -62,7 +93,7 @@ class IdentStore {
     // FREN MANAGEMENT
 
     addFren(nik: string, publicKey: Hex): void {
-        this.frens.set(nik, new Fren(publicKey));
+        this.frens.set(nik, new Fren(publicKey, nik));
     }
 
     getFrens(): Fren[] {
