@@ -5,15 +5,9 @@ import IdentStore from './IdentStore';
 
 let wakuNode: LightNode;
 
-export const TOPIC_PORTALS_LIST = '/PORTALS_LIST2/1/message/proto';
+// Only need messages topic now - portals are handled by Supabase
 export const TOPIC_PORTALS_MESSAGE = '/PORTALS_MESSAGE2/1/message/proto';
 export const TOPIC_FREN_REQUESTS = '/FREN_REQUESTS/1/message/proto';
-
-export const BOOTSTRAP_PEERS = [
-  '/dns4/boot-01.do-ams3.status.prod.status.im/tcp/443/wss/p2p/16Uiu2HAmAR24Mbb6VuzoyUiGx42UenDkshENVDj4qnmmbabLvo31',
-  '/dns4/boot-01.gc-us-central1-a.status.prod.status.im/tcp/443/wss/p2p/16Uiu2HAm8mUZ18tBWPXDQsaF7PbCKYA35z7WB2xNZH2EVq1qS8LJ',
-  '/dns4/boot-01.ac-cn-hongkong-c.status.prod.status.im/tcp/443/wss/p2p/16Uiu2HAmGwcE8v7gmJNEWFtZtojYpPMTHy2jBLL6xRk33qgDxFWX',
-];
 
 export const CLUSTER_ID = 42;
 export const SHARD_ID = 0;
@@ -21,14 +15,7 @@ export let wakuIsReady = false;
 
 export const idStore = new IdentStore();
 
-const portal_list_encoder = createEncoder({
-  contentTopic: TOPIC_PORTALS_LIST,
-  pubsubTopicShardInfo: { clusterId: CLUSTER_ID, shard: SHARD_ID },
-});
-const portal_list_decoder = createDecoder(TOPIC_PORTALS_LIST, {
-  clusterId: CLUSTER_ID,
-  shard: SHARD_ID,
-});
+// Only message encoder/decoder needed
 const portal_message_encoder = createEncoder({
   contentTopic: TOPIC_PORTALS_MESSAGE,
   pubsubTopicShardInfo: { clusterId: CLUSTER_ID, shard: SHARD_ID },
@@ -46,13 +33,7 @@ const fren_request_decoder = createDecoder(TOPIC_FREN_REQUESTS, {
   shard: SHARD_ID,
 });
 
-const PortalListDataPacket = new protobuf.Type('PortalListDataPacket')
-  .add(new protobuf.Field('timestamp', 1, 'uint64'))
-  .add(new protobuf.Field('id', 2, 'string'))
-  .add(new protobuf.Field('x', 3, 'uint64')).add(
-    new protobuf.Field('y', 4, 'uint64'),
-  );
-
+// Only message packet needed
 const PortalMessageDataPacket = new protobuf.Type('PortalMessageDataPacket')
   .add(new protobuf.Field('portalId', 1, 'string'))
   .add(new protobuf.Field('timestamp', 2, 'uint64'))
@@ -107,134 +88,88 @@ export const createWakuNode = async () => {
     ),
   ]);
 
-  console.log('LIGHT NODE CREATED');
+  console.log('WAKU LIGHT NODE CREATED (Messages Only)');
 
   await node.waitForPeers([Protocols.Filter, Protocols.LightPush]);
 
-  console.log('PEERS AWAITED');
+  console.log('WAKU PEERS CONNECTED');
 
-  // await Promise.allSettled([
-  //   node.dial(
-  //     '/dns4/waku-test.bloxy.one/tcp/8095/wss/p2p/16Uiu2HAmSZbDB7CusdRhgkD81VssRjQV5ZH13FbzCGcdnbbh6VwZ',
-  //   ),
-  //   node.dial(
-  //     '/dns4/vps-aaa00d52.vps.ovh.ca/tcp/8000/wss/p2p/16Uiu2HAm9PftGgHZwWE3wzdMde4m3kT2eYJFXLZfGoSED3gysofk',
-  //   ),
-  // ]);
   wakuNode = node;
-  // try {
-  //   node.store.queryWithOrderedCallback([portal_list_decoder], (msg) => {
-  //     if (msg != null) {
-  //       const messageObj = PortalListDataPacket.decode(msg.payload);
-  //       portalList.push(messageObj as unknown as Portal);
-  //     }
-  //   });
 
-  //   node.store.queryWithOrderedCallback([portal_message_decoder], (msg) => {
-  //     if (msg != null) {
-  //       const messageObj = PortalMessageDataPacket.decode(
-  //         msg.payload,
-  //       ) as unknown as PortalMessage;
-  //       if (Array.isArray(portalMessages[messageObj.portalId])) {
-  //         portalMessages[messageObj.portalId].push(messageObj);
-  //       } else {
-  //         portalMessages[messageObj.portalId] = [messageObj];
-  //       }
-  //     }
-  //   });
-  // } catch (e) {
-  //   console.error(e);
-  // }
-
-  await waku_SubToPortals();
+  // Only subscribe to messages - portals handled by Supabase
   await waku_SubToMessages();
   await waku_SubToFrenRequests();
 
   wakuIsReady = true;
 
-  console.log('Waku sub started ....');
-
+  // Debug logging for messages only
   setInterval(async () => {
-    console.log(portalList);
-    console.log(portalMessages);
-  }, 3000);
-};
-
-const waku_SubToPortals = async () => {
-  const callback = (wakuMessage: any) => {
-    console.log('new portal', wakuMessage);
-    if (!wakuMessage.payload) return;
-    const messageObj = PortalListDataPacket.decode(wakuMessage.payload);
-    portalList.push(messageObj as unknown as Portal);
-  };
-  try {
-    console.log('Subbing to Portals');
-    await wakuNode.nextFilter.subscribe(
-      portal_list_decoder,
-      callback,
+    const messageCount = Object.keys(portalMessages).reduce((total, portalId) => {
+      return total + portalMessages[portalId].length;
+    }, 0);
+    console.log(
+      `Waku messages cached: ${messageCount} total across ${
+        Object.keys(portalMessages).length
+      } portals`,
     );
-    console.log('Subbing to Portals SUCCESS');
-  } catch (e) {
-    console.error('Sub error to portals:', e);
-  }
+  }, 10000);
 };
 
 const waku_SubToMessages = async () => {
   const callback = (wakuMessage: any) => {
-    console.log('new msg', wakuMessage);
+    console.log('New Waku message received:', wakuMessage);
     if (!wakuMessage.payload) return;
-    const messageObj = PortalMessageDataPacket.decode(
-      wakuMessage.payload,
-    ) as unknown as PortalMessage;
-    if (Array.isArray(portalMessages[messageObj.portalId])) {
-      portalMessages[messageObj.portalId].push(messageObj);
-    } else {
-      portalMessages[messageObj.portalId] = [messageObj];
+
+    try {
+      const messageObj = PortalMessageDataPacket.decode(
+        wakuMessage.payload,
+      ) as unknown as PortalMessage;
+
+      if (Array.isArray(portalMessages[messageObj.portalId])) {
+        portalMessages[messageObj.portalId].push(messageObj);
+      } else {
+        portalMessages[messageObj.portalId] = [messageObj];
+      }
+
+      console.log(
+        `Message added to portal ${messageObj.portalId}: "${messageObj.message}"`,
+      );
+    } catch (err) {
+      console.error('Error decoding Waku message:', err);
     }
   };
+
   try {
-    await wakuNode.nextFilter.subscribe(
+    console.log('Subscribing to Waku messages...');
+    await wakuNode.filter.subscribe(
       portal_message_decoder,
       callback,
     );
+    console.log('Waku message subscription successful');
   } catch (e) {
-    console.error('Portal messages sub error: ', e);
-  }
-};
-
-export const waku_CreatePortal = async (x: number, y: number) => {
-  console.log('.... Creating portal ....');
-  try {
-    const protoMessage = PortalListDataPacket.create({
-      timestamp: Date.now(),
-      id: `${x},${y}`,
-      x,
-      y,
-    } as Portal);
-    const serialisedMessage = PortalListDataPacket.encode(protoMessage).finish();
-    await wakuNode.lightPush.send(portal_list_encoder, {
-      payload: serialisedMessage,
-    });
-    console.log('...... Portal created .....');
-  } catch (e) {
-    console.error('Error creating portal:', e);
+    console.error('Waku message subscription error:', e);
   }
 };
 
 export const waku_SendPortalMessage = async (message: PortalMessage) => {
-  console.log('.... Sending portal message ....');
-  const protoMessage = PortalMessageDataPacket.create(message);
-  const serialisedMessage = PortalMessageDataPacket.encode(protoMessage).finish();
+  console.log('Sending Waku message:', message);
+
   try {
+    const protoMessage = PortalMessageDataPacket.create(message);
+    const serialisedMessage = PortalMessageDataPacket.encode(protoMessage).finish();
+
     await wakuNode.lightPush.send(portal_message_encoder, {
       payload: serialisedMessage,
     });
+
+    console.log('Waku message sent successfully');
   } catch (e) {
-    console.error(e);
+    console.error('Waku message send error:', e);
+    throw e;
   }
 };
 
-const waku_SubToFrenRequestrs = async () => {
+const waku_SubToFrenRequests = async () => {
   const callback = (wakuMessage: any) => {
     console.log('new msg', wakuMessage);
     if (!wakuMessage.payload) return;
@@ -264,4 +199,13 @@ export const waku_SendFrenMessage = async (message: PortalMessage) => {
   } catch (e) {
     console.error(e);
   }
+};
+// Helper function to get Waku connection status
+export const getWakuStatus = () => {
+  if (!wakuNode) return 'disconnected';
+
+  const peers = wakuNode.libp2p?.getPeers() || [];
+  if (peers.length === 0) return 'connecting';
+
+  return 'connected';
 };
