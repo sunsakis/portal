@@ -2,8 +2,14 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../supabase/portals'
 import { 
   portalMessages, 
-  waku_SendPortalMessage 
+  waku_SendPortalMessage,
+  idStore,
+  frenRequests,
+  nickname 
 } from '../waku/node'
+
+// Define master portal ID locally if not exported
+const MASTER_PORTAL_ID = "master,key"
 
 // Generate portal ID from coordinates for Waku compatibility
 const generatePortalId = (latitude, longitude) => {
@@ -12,34 +18,42 @@ const generatePortalId = (latitude, longitude) => {
   return `${x},${y}`
 }
 
-// Simple local user management - no external auth needed
+// Enhanced local user management with Waku identity
 export const useLocalAuth = () => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    // Check for existing user in localStorage
     const existingUser = localStorage.getItem('portal_user')
     if (existingUser) {
       try {
-        setUser(JSON.parse(existingUser))
+        const userData = JSON.parse(existingUser)
+        // Ensure user has Waku identity
+        userData.wakuIdent = idStore.getMasterIdent()
+        setUser(userData)
       } catch (err) {
         console.error('Invalid user data, creating new user')
         localStorage.removeItem('portal_user')
       }
     }
     
-    // If no user exists, create anonymous user
     if (!existingUser) {
+      // Create anonymous user with Waku identity
+      const wakuIdent = idStore.getMasterIdent()
       const newUser = {
         id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         email: `anonymous_${Date.now()}@local.app`,
         created_at: new Date().toISOString(),
-        anonymous: true
+        anonymous: true,
+        wakuIdent: wakuIdent,
+        nickname: nickname // Use global nickname from Waku
       }
       
-      localStorage.setItem('portal_user', JSON.stringify(newUser))
+      localStorage.setItem('portal_user', JSON.stringify({
+        ...newUser,
+        wakuIdent: undefined // Don't serialize the identity object
+      }))
       setUser(newUser)
     }
     
@@ -49,14 +63,20 @@ export const useLocalAuth = () => {
   const signInAnonymously = async () => {
     try {
       setLoading(true)
+      const wakuIdent = idStore.getMasterIdent()
       const newUser = {
         id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         email: `anonymous_${Date.now()}@local.app`,
         created_at: new Date().toISOString(),
-        anonymous: true
+        anonymous: true,
+        wakuIdent: wakuIdent,
+        nickname: nickname
       }
       
-      localStorage.setItem('portal_user', JSON.stringify(newUser))
+      localStorage.setItem('portal_user', JSON.stringify({
+        ...newUser,
+        wakuIdent: undefined // Don't serialize the identity object
+      }))
       setUser(newUser)
       setError(null)
       setLoading(false)
@@ -69,7 +89,6 @@ export const useLocalAuth = () => {
   }
 
   const authenticateWithCode = async (email, action, code = null) => {
-    // Mock authentication for development
     if (action === 'send') {
       console.log(`Mock: Sending code to ${email}`)
       return true
@@ -77,14 +96,20 @@ export const useLocalAuth = () => {
     
     if (action === 'verify' && code) {
       console.log(`Mock: Verifying code ${code} for ${email}`)
+      const wakuIdent = idStore.getMasterIdent()
       const newUser = {
         id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         email: email,
         created_at: new Date().toISOString(),
-        anonymous: false
+        anonymous: false,
+        wakuIdent: wakuIdent,
+        nickname: email.split('@')[0] // Use email prefix as nickname
       }
       
-      localStorage.setItem('portal_user', JSON.stringify(newUser))
+      localStorage.setItem('portal_user', JSON.stringify({
+        ...newUser,
+        wakuIdent: undefined
+      }))
       setUser(newUser)
       return true
     }
@@ -103,8 +128,8 @@ export const useLocalAuth = () => {
     user, 
     loading, 
     error, 
-    authenticateWithCode, 
-    signInAnonymously,
+    authenticateWithCode,
+    signInAnonymously, 
     signOut,
     isAuthenticated: !!user 
   }
@@ -232,15 +257,22 @@ export const useLocalPortals = (user) => {
 
       console.log(`Fetched ${data.length} portals from Supabase`)
       
-      // Add frontend compatibility fields
-      const formattedPortals = data.map(portal => ({
-        ...portal,
-        id: generatePortalId(portal.latitude, portal.longitude), // Generate ID for frontend compatibility
-        profiles: {
-          username: portal.user_id === user?.id ? 'You' : 'Anonymous',
-          avatar_url: null
+      // Add frontend compatibility fields and Waku portal identities
+      const formattedPortals = data.map(portal => {
+        const portalId = generatePortalId(portal.latitude, portal.longitude)
+        
+        // Ensure each portal has a Waku identity
+        idStore.getPortalIdent(portalId)
+        
+        return {
+          ...portal,
+          id: portalId,
+          profiles: {
+            username: portal.user_id === user?.id ? 'You' : 'Anonymous',
+            avatar_url: null
+          }
         }
-      }))
+      })
       
       setPortals(formattedPortals)
       
@@ -335,6 +367,11 @@ export const useLocalPortals = (user) => {
       // Success - portal created with server-side validation
       console.log('Server-side portal creation successful:', data.data)
       
+      // Create Waku identity for this portal
+      const portalId = generatePortalId(location.latitude, location.longitude)
+      idStore.getPortalIdent(portalId)
+      console.log('Created Waku identity for portal:', portalId)
+      
       // Refresh portals list to show the new portal
       await fetchPortals()
       
@@ -355,6 +392,11 @@ export const useLocalPortals = (user) => {
 
     try {
       console.log('Closing Supabase portal at:', `${userPortal.latitude}, ${userPortal.longitude}`)
+      
+      // Remove Waku identity for this portal
+      const portalId = generatePortalId(userPortal.latitude, userPortal.longitude)
+      idStore.removePortalIdent(portalId)
+      console.log('Removed Waku identity for portal:', portalId)
       
       // Simply delete the portal
       const { error } = await supabase
@@ -391,7 +433,7 @@ export const useLocalPortals = (user) => {
   }
 }
 
-// Waku-powered message management for chat (unchanged)
+// Enhanced Waku-powered message management with friend request integration
 export const useLocalMessages = (portalId, user) => {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
@@ -414,7 +456,7 @@ export const useLocalMessages = (portalId, user) => {
         const formattedMessages = wakuMessages.map(msg => ({
           id: `${msg.timestamp}_${Math.random().toString(36).substr(2, 9)}`,
           portal_id: portalId,
-          user_id: `waku_user_${msg.timestamp}`, // Simple user identification
+          user_id: `waku_user_${msg.timestamp}`,
           content: msg.message,
           message_type: 'text',
           created_at: new Date(msg.timestamp).toISOString(),
@@ -452,11 +494,12 @@ export const useLocalMessages = (portalId, user) => {
     try {
       console.log('Sending Waku message:', content, 'to portal:', portalId)
       
-      // Send through Waku
+      // Send through Waku with portal identity
       await waku_SendPortalMessage({
         portalId: portalId,
         timestamp: Date.now(),
-        message: content.trim()
+        message: content.trim(),
+        portalPubkey: null // Will be set by waku_SendPortalMessage
       })
 
       console.log('Waku message sent successfully')
@@ -472,5 +515,128 @@ export const useLocalMessages = (portalId, user) => {
     messages,
     loading,
     sendMessage
+  }
+}
+
+// Enhanced friend request management hook
+export const useFriendRequests = (user) => {
+  const [friendRequests, setFriendRequests] = useState([])
+  const [friends, setFriends] = useState([])
+  const [processedRequests, setProcessedRequests] = useState(new Set()) // Track processed request IDs
+  const [lastProcessedCount, setLastProcessedCount] = useState(0) // Track changes to processed requests
+
+  useEffect(() => {
+    if (!user) return
+
+    // Load existing friends from localStorage
+    const storedFriends = localStorage.getItem('portal_friends')
+    if (storedFriends) {
+      try {
+        setFriends(JSON.parse(storedFriends))
+      } catch (err) {
+        console.error('Error loading friends:', err)
+      }
+    }
+
+    // Load processed requests from localStorage
+    const storedProcessed = localStorage.getItem('portal_processed_requests')
+    if (storedProcessed) {
+      try {
+        const processedArray = JSON.parse(storedProcessed)
+        setProcessedRequests(new Set(processedArray))
+        setLastProcessedCount(processedArray.length)
+      } catch (err) {
+        console.error('Error loading processed requests:', err)
+      }
+    }
+  }, [user]) // Only depend on user, not processedRequests
+
+  useEffect(() => {
+    if (!user) return
+
+    // Monitor incoming friend requests from Waku
+    const checkFriendRequests = () => {
+      if (frenRequests.length > 0) {
+        // Filter out already processed requests
+        const newRequests = frenRequests.filter(fren => {
+          const requestId = `${fren.nik}_${fren.publicKey}_${fren.address}`
+          return !processedRequests.has(requestId)
+        })
+
+        if (newRequests.length > 0) {
+          setFriendRequests(prev => {
+            // Avoid duplicates by checking if request already exists
+            const existingNiks = new Set(prev.map(req => req.nik))
+            const filteredNew = newRequests.filter(req => !existingNiks.has(req.nik))
+            if (filteredNew.length > 0) {
+              console.log('New friend requests detected:', filteredNew.length)
+              return [...prev, ...filteredNew]
+            }
+            return prev
+          })
+        }
+      }
+    }
+
+    // Check every 2 seconds for new friend requests (less frequent to reduce load)
+    const interval = setInterval(checkFriendRequests, 2000)
+    
+    return () => clearInterval(interval)
+  }, [user, lastProcessedCount]) // Depend on lastProcessedCount instead of processedRequests
+
+  const acceptFriendRequest = async (fren) => {
+    try {
+      // Add to friends list
+      const newFriend = {
+        nik: fren.nik,
+        publicKey: fren.publicKey,
+        address: fren.address,
+        acceptedAt: new Date().toISOString()
+      }
+      
+      const updatedFriends = [...friends, newFriend]
+      setFriends(updatedFriends)
+      
+      // Save to localStorage
+      localStorage.setItem('portal_friends', JSON.stringify(updatedFriends))
+      
+      // Mark as processed
+      const requestId = `${fren.nik}_${fren.publicKey}_${fren.address}`
+      const updatedProcessed = new Set([...processedRequests, requestId])
+      setProcessedRequests(updatedProcessed)
+      setLastProcessedCount(updatedProcessed.size)
+      localStorage.setItem('portal_processed_requests', JSON.stringify([...updatedProcessed]))
+      
+      // Remove from pending requests
+      setFriendRequests(prev => prev.filter(req => req.nik !== fren.nik))
+      
+      console.log('Friend request accepted:', fren.nik)
+      return true
+      
+    } catch (err) {
+      console.error('Error accepting friend request:', err)
+      return false
+    }
+  }
+
+  const declineFriendRequest = (fren) => {
+    // Mark as processed so it doesn't come back
+    const requestId = `${fren.nik}_${fren.publicKey}_${fren.address}`
+    const updatedProcessed = new Set([...processedRequests, requestId])
+    setProcessedRequests(updatedProcessed)
+    setLastProcessedCount(updatedProcessed.size)
+    localStorage.setItem('portal_processed_requests', JSON.stringify([...updatedProcessed]))
+    
+    // Remove from pending requests
+    setFriendRequests(prev => prev.filter(req => req.nik !== fren.nik))
+    
+    console.log('Friend request declined:', fren.nik)
+  }
+
+  return {
+    friendRequests,
+    friends,
+    acceptFriendRequest,
+    declineFriendRequest
   }
 }
