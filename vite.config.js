@@ -2,6 +2,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { VitePWA } from 'vite-plugin-pwa';
+
 export default defineConfig({
   plugins: [
     react(),
@@ -37,7 +38,13 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
+        // OPTION 2: Skip large JS files from precaching
+        globPatterns: ['**/*.{css,html,ico,png,svg,webp}'],
+        globIgnores: ['**/index-*.js'], // Skip large JS bundles
+        
+        // OR OPTION 1: Just increase the limit
+        // maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
+        // globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/_/, /\/[^/?]+\.[^/]+$/],
         runtimeCaching: [
@@ -103,10 +110,14 @@ export default defineConfig({
           vendor: ['react', 'react-dom'],
           maps: ['leaflet', 'react-leaflet'],
           ui: ['framer-motion', '@use-gesture/react'],
+          // ADD WAKU TO SEPARATE CHUNK
+          waku: ['@waku/sdk', 'protobufjs'],
+          crypto: ['eth-crypto', 'viem', 'buffer', 'crypto-browserify'],
         },
       },
     },
-    chunkSizeWarningLimit: 1000,
+    // INCREASE CHUNK SIZE WARNING LIMIT
+    chunkSizeWarningLimit: 4000, // 4MB instead of 1MB
   },
 
   optimizeDeps: {
