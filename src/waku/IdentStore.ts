@@ -69,7 +69,7 @@ class IdentStore {
     return fren;
   }
 
-  async showYouReAFrenToAll(portalPubKey: Hex, frenPubKey: Hex): Promise<string[]> {
+  async showYouReAFrenToAll(portalPubKey: Hex): Promise<string[]> {
     const frenSignals = await Promise.all(Array.from(this.frens.values()).map(
         fren => this._prepareShowYouReAFren(portalPubKey, fren.publicKey)
     ));
