@@ -8,6 +8,7 @@ import { UserPortalMarker, OtherPortalsMarkers } from './MapMarkers'
 import ChatPortal from './ChatPortal'
 import MapLayers from './MapLayers'
 import ConnectionStatus from './ConnectionStatus'
+import MessageFlowOverlay from './MessageFlowOverlay'
 import { getWakuStatus } from '../waku/node'
 
 import 'leaflet/dist/leaflet.css'
@@ -308,6 +309,9 @@ export default function Map() {
           userId={user?.id}
           onPortalClick={handlePortalClick}
         />
+
+        {/* Message Flow Animation Overlay */}
+        <MessageFlowOverlay portals={portals} />
       </MapContainer>
 
       {/* Chat Portal Interface */}
