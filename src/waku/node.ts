@@ -142,10 +142,12 @@ const waku_SubToMessages = async () => {
       ) as unknown as PortalMessage;
 
       const fren = await idStore.recoverSenderIfFren(messageObj.frensArray);
+
+      console.log('FREN in msg?', fren);
+
       messageObj.fren = fren;
-      messageObj.isMyMessage =
-        messageObj.portalPubkey
-          === idStore.getPortalIdent(messageObj.portalId as any).publicKey;
+      messageObj.isMyMessage = messageObj.portalPubkey
+        === idStore.getPortalIdent(messageObj.portalId as any).publicKey;
 
       if (Array.isArray(portalMessages[messageObj.portalId])) {
         portalMessages[messageObj.portalId].push(messageObj);
@@ -176,6 +178,9 @@ const waku_SubToMessages = async () => {
 export const waku_SendPortalMessage = async (message: PortalMessage) => {
   const portalPubKey = idStore.getPortalIdent(message.portalId as any).publicKey;
   message.portalPubkey = portalPubKey as Hex;
+
+  console.log('FRENS ARR', await idStore.showYouReAFrenToAll(portalPubKey));
+
   message.frensArray = await idStore.showYouReAFrenToAll(portalPubKey);
 
   try {
@@ -195,11 +200,12 @@ export const waku_SendPortalMessage = async (message: PortalMessage) => {
 
 const waku_SubToFrenRequests = async () => {
   const callback = async (wakuMessage: any) => {
-    console.log('new msg', wakuMessage);
     if (!wakuMessage.payload) return;
     const messageObj = FriendRequestDataPacket.decode(
       wakuMessage.payload,
     ) as unknown as FrenRequest;
+    console.log('new msg', messageObj);
+
     const frenRequest = messageObj.request;
     const fren = await idStore.hooWanaBeFrens(frenRequest);
     if (fren) {
@@ -217,14 +223,21 @@ const waku_SubToFrenRequests = async () => {
 };
 
 export const waku_acceptFriendRequest = async (fren: Fren) => {
+  idStore.addFren(fren.nik, fren.publicKey);
   await waku_SendFrenMessage(
     await idStore.lesBeFrens(nickname, fren.publicKey, MASTER_PORTAL_ID),
+    MASTER_PORTAL_ID,
   );
 };
 
-export const waku_SendFrenMessage = async (frenPortalPubkey: string) => {
+export const waku_SendFrenMessage = async (
+  frenPortalPubkey: string,
+  portalId: string,
+) => {
   console.log('.... Sending fren message ....');
-  const protoMessage = FriendRequestDataPacket.create({ request: frenPortalPubkey });
+  const protoMessage = FriendRequestDataPacket.create({
+    request: frenPortalPubkey,
+  });
   const serialisedMessage = FriendRequestDataPacket.encode(protoMessage).finish();
   try {
     await wakuNode.lightPush.send(fren_request_encoder, {

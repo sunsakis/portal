@@ -22,9 +22,6 @@ const MessageBubble = ({ msg, user, onUserClick }) => {
   };
 
   const getDisplayName = (msg) => {
-    console.log(
-      msg,
-    );
     // If it's my own message
     if (isOwnMessage) return 'You';
 
@@ -141,7 +138,7 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal })
       );
 
       // Send the friend request via Waku
-      await waku_SendFrenMessage(friendRequest);
+      await waku_SendFrenMessage(friendRequest, portal.id);
 
       console.log('Friend request sent successfully via Waku');
       setRequestSent(true);
