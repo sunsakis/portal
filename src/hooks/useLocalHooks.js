@@ -472,6 +472,7 @@ export const useLocalMessages = (portalId, user) => {
 
         // Convert to frontend format
         const formattedMessages = wakuMessages.map(msg => ({
+          ...msg,
           id: `${msg.timestamp}_${Math.random().toString(36).substr(2, 9)}`,
           portal_id: portalId,
           user_id: msg.portalPubkey,
@@ -482,9 +483,6 @@ export const useLocalMessages = (portalId, user) => {
             username: `User_${msg.timestamp.toString().slice(-4)}`,
             avatar_url: null,
           },
-          portalPubkey: msg.portalPubkey,
-          fren: msg.fren,
-          isMyMessage: msg.isMyMessage,           
         }));
 
         // Sort by timestamp

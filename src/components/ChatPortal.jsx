@@ -4,10 +4,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useLocalMessages } from '../hooks/useLocalHooks';
 import {
   frenRequests,
+  getPetName, // Import getPetName function
   idStore,
   waku_acceptFriendRequest,
   waku_SendFrenMessage,
-  getPetName, // Import getPetName function
 } from '../waku/node';
 
 // Enhanced Message Component with pet names and friend recognition
@@ -22,18 +22,17 @@ const MessageBubble = ({ msg, user, onUserClick }) => {
   };
 
   const getDisplayName = (msg) => {
-
     console.log(
-      msg
-    )
+      msg,
+    );
     // If it's my own message
     if (isOwnMessage) return 'You';
-    
+
     // If sender is a friend, show their username
     if (msg.fren && msg.fren.nik) {
       return msg.fren.nik;
     }
-    
+
     // Otherwise show pet name based on their portal public key
     return getPetName(msg.portalPubkey);
   };
@@ -56,7 +55,7 @@ const MessageBubble = ({ msg, user, onUserClick }) => {
       });
     }
   };
-  
+
   const displayName = getDisplayName(msg);
   const isFriend = !!msg.fren;
 
@@ -72,27 +71,25 @@ const MessageBubble = ({ msg, user, onUserClick }) => {
             : 'bg-gray-700 text-gray-100 hover:bg-gray-600 cursor-pointer border border-gray-600 hover:border-gray-500'
         }`}
       >
-        {!isOwnMessage && (
-          <div className='flex items-center gap-2 mb-1'>
-            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
-              isFriend 
+        <div className='flex items-center gap-2 mb-1'>
+          <div
+            className={`w-5 h-5 rounded-full flex items-center justify-center ${
+              isFriend
                 ? 'bg-gradient-to-br from-blue-500 to-purple-600' // Friend avatar
                 : 'bg-gradient-to-br from-green-500 to-emerald-600' // Anonymous avatar
-            }`}>
-              <span className='text-xs font-bold text-white'>
-                {getAvatarText(displayName)}
-              </span>
-            </div>
-            <div className='flex items-center gap-1'>
-              <div className='text-xs text-gray-300 font-medium'>
-                {displayName}
-              </div>
-              {isFriend && (
-                <span className='text-xs text-blue-400' title="Friend">👥</span>
-              )}
-            </div>
+            }`}
+          >
+            <span className='text-xs font-bold text-white'>
+              {getAvatarText(displayName)}
+            </span>
           </div>
-        )}
+          <div className='flex items-center gap-1'>
+            <div className='text-xs text-gray-300 font-medium'>
+              {displayName}
+            </div>
+            {isFriend && <span className='text-xs text-blue-400' title='Friend'>👥</span>}
+          </div>
+        </div>
 
         <div className='text-sm leading-relaxed'>{msg.message}</div>
 
@@ -161,7 +158,8 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal })
     }
   };
 
-  const isOwnProfile = messageUser.portalPubkey === idStore.getPortalIdent(portal?.id).publicKey;
+  const isOwnProfile =
+    messageUser.portalPubkey === idStore.getPortalIdent(portal?.id).publicKey;
   const isFriend = messageUser.isFriend;
 
   return (
@@ -183,11 +181,13 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal })
         >
           {/* Profile Header */}
           <div className='text-center mb-6'>
-            <div className={`w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center shadow-lg ${
-              isFriend 
-                ? 'bg-gradient-to-br from-blue-500 to-purple-600' 
-                : 'bg-gradient-to-br from-green-500 to-emerald-600'
-            }`}>
+            <div
+              className={`w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center shadow-lg ${
+                isFriend
+                  ? 'bg-gradient-to-br from-blue-500 to-purple-600'
+                  : 'bg-gradient-to-br from-green-500 to-emerald-600'
+              }`}
+            >
               <span className='text-2xl font-bold text-white'>
                 {(messageUser.username || 'Anonymous').charAt(0).toUpperCase()}
               </span>
@@ -195,7 +195,9 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal })
 
             <h2 className='text-xl font-semibold text-gray-100 mb-1 flex items-center justify-center gap-2'>
               {messageUser.username || 'Anonymous User'}
-              {isFriend && <span className='text-blue-400 text-lg' title="Friend">👥</span>}
+              {isFriend && (
+                <span className='text-blue-400 text-lg' title='Friend'>👥</span>
+              )}
             </h2>
 
             <div className='inline-flex items-center gap-2 px-3 py-1 bg-gray-700 rounded-full'>
@@ -215,7 +217,11 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal })
               <div className='text-xs text-gray-400'>Messages</div>
             </div>
             <div className='text-center p-3 bg-gray-700/50 rounded-lg border border-gray-600'>
-              <div className={`text-lg font-bold ${isFriend ? 'text-blue-400' : 'text-orange-400'}`}>
+              <div
+                className={`text-lg font-bold ${
+                  isFriend ? 'text-blue-400' : 'text-orange-400'
+                }`}
+              >
                 {isFriend ? 'Friend' : 'Anonymous'}
               </div>
               <div className='text-xs text-gray-400'>Status</div>
