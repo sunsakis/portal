@@ -36,10 +36,10 @@ const MessageFlowOverlay = ({ portals = [] }) => {
 
                 setFlowingMessages(prev => [...prev, flowMessage])
 
-                // Remove after animation (increased to match longer duration)
+                // Remove after animation completes
                 setTimeout(() => {
                   setFlowingMessages(prev => prev.filter(fm => fm.id !== flowMessage.id))
-                }, 5000) // 5 seconds instead of 3
+                }, 6000) // Extended to 6 seconds to account for full animation + exit
               }, index * 500) // Slower stagger - 500ms between messages
             })
           }
@@ -101,20 +101,31 @@ const FlowingMessage = ({ message }) => {
         x: message.x,
         y: message.y,
         opacity: 0,
-        scale: 1,
+        scale: 0.6,
       }}
       animate={{
         x: endX,
         y: endY,
-        opacity: [0, 0.2, 0.3, 0.6, 0.5, 0.3],
-        scale: [0.6, 1, 1.05, 1, 0.8, 0.75],
+        opacity: [0, 0.3, 0.7, 0.8, 0.6, 0.3],
+        scale: [0.6, 1, 1.05, 1, 0.9, 0.8],
+      }}
+      exit={{
+        opacity: 0,
+        scale: 0.5,
+        transition: {
+          duration: 0.8,
+          ease: [0.25, 0.8, 0.5, 1] // Smooth ease-out
+        }
       }}
       transition={{
-        duration: 4.5, // Flowout duration
+        duration: 4.5, // Flow animation duration
         ease: [0.1, 0.6, 0.2, 0.95], // Gentler easing curve
         opacity: {
-          times: [0, 0.1, 0.8, 0.95, 1], // Slower fade in/out
+          times: [0, 0.15, 0.4, 0.6, 0.85, 1], // Smoother opacity progression
         },
+        scale: {
+          times: [0, 0.2, 0.4, 0.6, 0.8, 1], // Smoother scale progression
+        }
       }}
       className="absolute transform -translate-x-1/2 -translate-y-1/2"
       style={{ left: 0, top: 0 }}
