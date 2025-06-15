@@ -7,11 +7,12 @@ import {
   idStore,
   waku_acceptFriendRequest,
   waku_SendFrenMessage,
+  getPetName, // Import getPetName function
 } from '../waku/node';
 
-// Enhanced Message Component with real friend request integration
+// Enhanced Message Component with pet names and friend recognition
 const MessageBubble = ({ msg, user, onUserClick }) => {
-  const isOwnMessage = msg.user_id === user?.id;
+  const isOwnMessage = msg.isMyMessage;
 
   const formatTime = (timestamp) => {
     return new Date(timestamp).toLocaleTimeString('en-US', {
@@ -20,22 +21,44 @@ const MessageBubble = ({ msg, user, onUserClick }) => {
     });
   };
 
-  const getUsername = (msg) => {
-    if (msg.user_id === user?.id) return 'You';
-    return msg.profiles?.username || 'Anonymous';
+  const getDisplayName = (msg) => {
+
+    console.log(
+      msg
+    )
+    // If it's my own message
+    if (isOwnMessage) return 'You';
+    
+    // If sender is a friend, show their username
+    if (msg.fren && msg.fren.nik) {
+      return msg.fren.nik;
+    }
+    
+    // Otherwise show pet name based on their portal public key
+    return getPetName(msg.portalPubkey);
+  };
+
+  const getAvatarText = (displayName) => {
+    return displayName.charAt(0).toUpperCase();
   };
 
   const handleUserClick = () => {
     if (!isOwnMessage) {
+      const displayName = getDisplayName(msg);
       onUserClick({
-        user_id: msg.user_id,
-        username: getUsername(msg),
+        user_id: msg.portalPubkey, // Use public key as unique ID
+        username: displayName,
         messageCount: 1,
-        joinedAt: msg.created_at,
-        portalId: msg.portal_id, // Include portal ID for friend requests
+        joinedAt: msg.timestamp,
+        portalId: msg.portalId,
+        isFriend: !!msg.fren, // Flag to indicate if this is a friend
+        portalPubkey: msg.portalPubkey,
       });
     }
   };
+  
+  const displayName = getDisplayName(msg);
+  const isFriend = !!msg.fren;
 
   return (
     <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
@@ -51,25 +74,34 @@ const MessageBubble = ({ msg, user, onUserClick }) => {
       >
         {!isOwnMessage && (
           <div className='flex items-center gap-2 mb-1'>
-            <div className='w-5 h-5 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center'>
+            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
+              isFriend 
+                ? 'bg-gradient-to-br from-blue-500 to-purple-600' // Friend avatar
+                : 'bg-gradient-to-br from-green-500 to-emerald-600' // Anonymous avatar
+            }`}>
               <span className='text-xs font-bold text-white'>
-                {getUsername(msg).charAt(0).toUpperCase()}
+                {getAvatarText(displayName)}
               </span>
             </div>
-            <div className='text-xs text-gray-300 font-medium'>
-              {getUsername(msg)}
+            <div className='flex items-center gap-1'>
+              <div className='text-xs text-gray-300 font-medium'>
+                {displayName}
+              </div>
+              {isFriend && (
+                <span className='text-xs text-blue-400' title="Friend">👥</span>
+              )}
             </div>
           </div>
         )}
 
-        <div className='text-sm leading-relaxed'>{msg.content}</div>
+        <div className='text-sm leading-relaxed'>{msg.message}</div>
 
         <div
           className={`text-xs mt-1 flex items-center gap-1 ${
             isOwnMessage ? 'text-green-200 justify-end' : 'text-gray-400'
           }`}
         >
-          <span>{formatTime(msg.created_at)}</span>
+          <span>{formatTime(msg.timestamp)}</span>
           {!isOwnMessage && <div className='w-1 h-1 bg-gray-500 rounded-full'></div>}
         </div>
       </motion.div>
@@ -77,7 +109,7 @@ const MessageBubble = ({ msg, user, onUserClick }) => {
   );
 };
 
-// Enhanced User Profile Modal with real Waku friend requests
+// Enhanced User Profile Modal with friend status
 const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [requestSent, setRequestSent] = useState(false);
@@ -98,16 +130,16 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal })
       console.log('Sending friend request via Waku...', {
         username: messageUser.username,
         portalId: portal.id,
+        targetPubkey: messageUser.portalPubkey,
       });
 
       // Get the portal identity for this specific portal
       const portalIdent = idStore.getPortalIdent(portal.id);
 
-      // Create friend request using the portal's public key
-      // Use portal.id directly instead of MASTER_PORTAL_ID for portal-specific requests
+      // Create friend request using the target user's public key
       const friendRequest = await idStore.lesBeFrens(
-        messageUser.username,
-        portalIdent.publicKey,
+        messageUser.username, // Use the display name
+        messageUser.portalPubkey, // Target user's public key
         portal.id,
       );
 
@@ -129,7 +161,8 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal })
     }
   };
 
-  const isOwnProfile = messageUser.user_id === currentUser?.id;
+  const isOwnProfile = messageUser.portalPubkey === idStore.getPortalIdent(portal?.id).publicKey;
+  const isFriend = messageUser.isFriend;
 
   return (
     <AnimatePresence>
@@ -150,19 +183,26 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal })
         >
           {/* Profile Header */}
           <div className='text-center mb-6'>
-            <div className='w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full mx-auto mb-4 flex items-center justify-center shadow-lg'>
+            <div className={`w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center shadow-lg ${
+              isFriend 
+                ? 'bg-gradient-to-br from-blue-500 to-purple-600' 
+                : 'bg-gradient-to-br from-green-500 to-emerald-600'
+            }`}>
               <span className='text-2xl font-bold text-white'>
                 {(messageUser.username || 'Anonymous').charAt(0).toUpperCase()}
               </span>
             </div>
 
-            <h2 className='text-xl font-semibold text-gray-100 mb-1'>
+            <h2 className='text-xl font-semibold text-gray-100 mb-1 flex items-center justify-center gap-2'>
               {messageUser.username || 'Anonymous User'}
+              {isFriend && <span className='text-blue-400 text-lg' title="Friend">👥</span>}
             </h2>
 
             <div className='inline-flex items-center gap-2 px-3 py-1 bg-gray-700 rounded-full'>
               <div className='w-2 h-2 bg-green-400 rounded-full animate-pulse'></div>
-              <span className='text-xs text-gray-300'>Active in portal</span>
+              <span className='text-xs text-gray-300'>
+                {isFriend ? 'Friend in portal' : 'Active in portal'}
+              </span>
             </div>
           </div>
 
@@ -175,8 +215,8 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal })
               <div className='text-xs text-gray-400'>Messages</div>
             </div>
             <div className='text-center p-3 bg-gray-700/50 rounded-lg border border-gray-600'>
-              <div className='text-lg font-bold text-blue-400'>
-                {messageUser.joinedAt ? 'Active' : 'New'}
+              <div className={`text-lg font-bold ${isFriend ? 'text-blue-400' : 'text-orange-400'}`}>
+                {isFriend ? 'Friend' : 'Anonymous'}
               </div>
               <div className='text-xs text-gray-400'>Status</div>
             </div>
@@ -191,7 +231,7 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal })
 
           {/* Action Buttons */}
           <div className='space-y-3'>
-            {!isOwnProfile && (
+            {!isOwnProfile && !isFriend && (
               <>
                 {!requestSent
                   ? (
@@ -228,24 +268,22 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal })
                       <span>Request Sent!</span>
                     </motion.div>
                   )}
-
-                <button
-                  onClick={onClose}
-                  className='w-full bg-gray-700 hover:bg-gray-600 text-gray-300 py-3 px-4 rounded-xl font-medium transition-colors duration-200 border border-gray-600'
-                >
-                  Close
-                </button>
               </>
             )}
 
-            {isOwnProfile && (
-              <button
-                onClick={onClose}
-                className='w-full bg-gray-700 hover:bg-gray-600 text-gray-300 py-3 px-4 rounded-xl font-medium transition-colors duration-200 border border-gray-600'
-              >
-                Close Profile
-              </button>
+            {isFriend && (
+              <div className='w-full bg-blue-600 text-white py-3 px-4 rounded-xl font-medium flex items-center justify-center gap-2'>
+                <span className='text-lg'>👥</span>
+                <span>Already Friends</span>
+              </div>
             )}
+
+            <button
+              onClick={onClose}
+              className='w-full bg-gray-700 hover:bg-gray-600 text-gray-300 py-3 px-4 rounded-xl font-medium transition-colors duration-200 border border-gray-600'
+            >
+              {isOwnProfile ? 'Close Profile' : 'Close'}
+            </button>
           </div>
         </motion.div>
       </motion.div>
@@ -405,7 +443,7 @@ const FriendRequestNotifications = ({ user }) => {
   );
 };
 
-// Main Chat Portal Component (removed duplicate FriendRequestNotifications)
+// Main Chat Portal Component
 const ChatPortal = ({ isOpen, onClose, portal, user }) => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState(null);
