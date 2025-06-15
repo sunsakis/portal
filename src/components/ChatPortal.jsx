@@ -1,84 +1,86 @@
-import React, { useEffect, useState, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useDrag } from '@use-gesture/react'
-import { useLocalMessages } from '../hooks/useLocalHooks'
+import { useDrag } from '@use-gesture/react';
+import { AnimatePresence, motion } from 'framer-motion';
+import React, { useEffect, useRef, useState } from 'react';
+import { useLocalMessages } from '../hooks/useLocalHooks';
+import { getPetName, idStore } from '../waku/node';
 
 const ChatPortal = ({ isOpen, onClose, portal, user }) => {
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState(null)
-  const messagesEndRef = useRef(null)
-  const inputRef = useRef(null)
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState(null);
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
 
   // Use local message management
-  const { messages, loading, sendMessage } = useLocalMessages(portal?.id, user)
+  const { messages, loading, sendMessage } = useLocalMessages(portal?.id, user);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+    scrollToBottom();
+  }, [messages]);
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 300)
+      setTimeout(() => inputRef.current?.focus(), 300);
     }
-  }, [isOpen])
+  }, [isOpen]);
 
   const handleSendMessage = async () => {
-    if (!message.trim() || !portal?.id || !user) return
+    if (!message.trim() || !portal?.id || !user) return;
 
-    const messageContent = message.trim()
-    setMessage('') // Clear input immediately
-    setError(null)
+    const messageContent = message.trim();
+    setMessage(''); // Clear input immediately
+    setError(null);
 
     try {
-      console.log('Sending local message:', messageContent)
-      
-      const success = await sendMessage(messageContent)
+      console.log('Sending local message:', messageContent);
+
+      const success = await sendMessage(messageContent);
 
       if (!success) {
-        console.error('Local message send failed')
-        setMessage(messageContent) // Restore message on error
-        setError('Failed to send message')
+        console.error('Local message send failed');
+        setMessage(messageContent); // Restore message on error
+        setError('Failed to send message');
       }
     } catch (err) {
-      console.error('Message send error:', err)
-      setMessage(messageContent) // Restore message on error
-      setError('Failed to send message')
+      console.error('Message send error:', err);
+      setMessage(messageContent); // Restore message on error
+      setError('Failed to send message');
     }
-  }
+  };
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSendMessage()
+      e.preventDefault();
+      handleSendMessage();
     }
-  }
+  };
 
   const formatTime = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    })
-  }
+    return new Date(timestamp).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
 
   const getUsername = (msg) => {
-    if (msg.user_id === user?.id) return 'You'
-    return msg.profiles?.username || 'Anonymous'
-  }
+    if (msg.user_id === user?.id) return 'You';
+    console.log(getPetName(msg, msg.portalPubkey));
+    return getPetName(msg, msg.portalPubkey);
+  };
 
   const bind = useDrag(
     ({ last, velocity: [, vy], direction: [, dy], movement: [, my] }) => {
       if (last && (my > 100 || (vy > 0.5 && dy > 0))) {
-        onClose()
+        onClose();
       }
     },
-    { from: () => [0, 0], filterTaps: true, bounds: { top: 0 }, rubberband: true }
-  )
+    { from: () => [0, 0], filterTaps: true, bounds: { top: 0 }, rubberband: true },
+  );
 
-  if (!portal) return null
+  if (!portal) return null;
 
   return (
     <AnimatePresence>
@@ -89,11 +91,11 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.5 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black"
+            className='fixed inset-0 bg-black'
             style={{ zIndex: 1800 }}
             onClick={onClose}
           />
-          
+
           {/* Dark themed chat modal */}
           <motion.div
             {...bind()}
@@ -101,91 +103,108 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed bottom-0 left-0 right-0 bg-gray-900 rounded-t-3xl touch-none flex flex-col"
-            role="dialog"
-            aria-modal="true"
-            style={{ 
-              maxHeight: '70vh', 
+            className='fixed bottom-0 left-0 right-0 bg-gray-900 rounded-t-3xl touch-none flex flex-col'
+            role='dialog'
+            aria-modal='true'
+            style={{
+              maxHeight: '70vh',
               zIndex: 1900,
-              paddingBottom: 'env(safe-area-inset-bottom, 20px)'
+              paddingBottom: 'env(safe-area-inset-bottom, 20px)',
             }}
           >
             {/* Drag handle */}
-            <div className="flex justify-center pt-3 pb-2">
-              <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
+            <div className='flex justify-center pt-3 pb-2'>
+              <div className='w-10 h-1 bg-gray-600 rounded-full'></div>
             </div>
 
             {/* Messages Area - Dark theme */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
-              {loading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-400 mx-auto"></div>
-                  <p className="text-gray-400 mt-2">Loading messages...</p>
-                </div>
-              ) : error ? (
-                <div className="text-center py-8">
-                  <div className="text-4xl mb-2">⚠️</div>
-                  <p className="text-red-400 text-sm">{error}</p>
-                  <button
-                    onClick={() => window.location.reload()}
-                    className="mt-2 text-green-400 text-sm hover:text-green-300 transition-colors"
-                  >
-                    Refresh and try again
-                  </button>
-                </div>
-              ) : messages.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-xl mb-2">💬</div>
-                  <p className="text-gray-300">
-                    Start a conversation with people at this location!
-                  </p>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Messages are stored locally on your device
-                  </p>
-                </div>
-              ) : (
-                messages.map((msg) => (
-                  <div key={msg.id} className={`flex ${msg.user_id === user?.id ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-xs lg:max-w-md px-3 py-2 rounded-2xl ${
-                      msg.user_id === user?.id
-                        ? 'bg-green-600 text-white'
-                        : 'bg-gray-700 text-gray-100'
-                    }`}>
-                      {msg.user_id !== user?.id && (
-                        <div className="text-xs opacity-70 mb-1 text-gray-300">
-                          {getUsername(msg)}
-                        </div>
-                      )}
-                      <div className="text-sm">{msg.content}</div>
-                      <div className={`text-xs mt-1 ${
-                        msg.user_id === user?.id ? 'text-green-200' : 'text-gray-400'
-                      }`}>
-                        {formatTime(msg.created_at)}
-                      </div>
+            <div className='flex-1 overflow-y-auto p-4 space-y-3 min-h-0'>
+              {loading
+                ? (
+                  <div className='text-center py-8'>
+                    <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-green-400 mx-auto'>
                     </div>
+                    <p className='text-gray-400 mt-2'>Loading messages...</p>
                   </div>
-                ))
-              )}
+                )
+                : error
+                ? (
+                  <div className='text-center py-8'>
+                    <div className='text-4xl mb-2'>⚠️</div>
+                    <p className='text-red-400 text-sm'>{error}</p>
+                    <button
+                      onClick={() => window.location.reload()}
+                      className='mt-2 text-green-400 text-sm hover:text-green-300 transition-colors'
+                    >
+                      Refresh and try again
+                    </button>
+                  </div>
+                )
+                : messages.length === 0
+                ? (
+                  <div className='text-center py-8'>
+                    <div className='text-xl mb-2'>💬</div>
+                    <p className='text-gray-300'>
+                      Start a conversation with people at this location!
+                    </p>
+                    <p className='text-xs text-gray-500 mt-2'>
+                      Messages are stored locally on your device
+                    </p>
+                  </div>
+                )
+                : (
+                  messages.map((msg) => {
+                    const isUser = msg.user_id === idStore.getPortalIdent(msg.portalId);
+                    console.log(msg);
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div
+                          className={`max-w-xs lg:max-w-md px-3 py-2 rounded-2xl ${
+                            isUser === user?.id
+                              ? 'bg-green-600 text-white'
+                              : 'bg-gray-700 text-gray-100'
+                          }`}
+                        >
+                          <div className='text-xs opacity-70 mb-1 text-gray-300'>
+                            {getUsername(msg)}
+                          </div>
+
+                          <div className='text-sm'>{msg.content}</div>
+                          <div
+                            className={`text-xs mt-1 ${
+                              isUser ? 'text-green-200' : 'text-gray-400'
+                            }`}
+                          >
+                            {formatTime(msg.created_at)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               <div ref={messagesEndRef} />
             </div>
 
             {/* Input Area - Dark theme */}
-            <div className="flex-shrink-0 p-4 border-t border-gray-700">
+            <div className='flex-shrink-0 p-4 border-t border-gray-700'>
               {error && (
-                <div className="mb-2 text-center">
-                  <p className="text-red-400 text-xs">{error}</p>
+                <div className='mb-2 text-center'>
+                  <p className='text-red-400 text-xs'>{error}</p>
                 </div>
               )}
-              <div className="flex items-end gap-2">
-                <div className="flex-1 relative">
+              <div className='flex items-end gap-2'>
+                <div className='flex-1 relative'>
                   <textarea
                     ref={inputRef}
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyPress={handleKeyPress}
-                    placeholder="Type a message..."
-                    className="w-full px-4 py-3 bg-gray-800 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors"
-                    rows="1"
+                    placeholder='Type a message...'
+                    className='w-full px-4 py-3 bg-gray-800 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors'
+                    rows='1'
                     style={{ minHeight: '44px', maxHeight: '100px' }}
                   />
                 </div>
@@ -199,7 +218,7 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
                   }`}
                   style={{ minWidth: '44px', height: '44px' }}
                 >
-                  <span className="text-lg">➤</span>
+                  <span className='text-lg'>➤</span>
                 </button>
               </div>
             </div>
@@ -207,7 +226,7 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
         </>
       )}
     </AnimatePresence>
-  )
-}
+  );
+};
 
-export default ChatPortal
+export default ChatPortal;
