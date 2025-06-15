@@ -23,7 +23,7 @@ export const SHARD_ID = 0;
 export let wakuIsReady = false;
 
 export const idStore = new IdentStore();
-export let customNickname = 'W3PN hacker';
+export let nickname = 'W3PN hacker';
 
 // Only message encoder/decoder needed
 const portal_message_encoder = createEncoder({
