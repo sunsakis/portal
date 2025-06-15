@@ -131,7 +131,7 @@ const FlowingMessage = ({ message }) => {
       style={{ left: 0, top: 0 }}
     >
       {/* Dark green message bubble matching chat theme */}
-      <div className="bg-gray-700/95 backdrop-blur-sm text-white px-3 py-2 rounded-full shadow-lg border border-green-500/50 max-w-[200px]">
+      <div className="bg-gray-200/95 backdrop-blur-sm text-black px-3 py-2 rounded-full shadow-lg border border-green-500/50 max-w-[200px]">
         <div className="text-xs font-medium text-center">
           {displayText}
         </div>

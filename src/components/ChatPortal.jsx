@@ -135,7 +135,7 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
                 </div>
               ) : messages.length === 0 ? (
                 <div className="text-center py-8">
-                  <div className="text-4xl mb-2">👋</div>
+                  <div className="text-xl mb-2">💬</div>
                   <p className="text-gray-300">
                     Start a conversation with people at this location!
                   </p>
