@@ -58,8 +58,9 @@ export interface PortalMessage {
   portalId: string;
   timestamp: number;
   message: string;
-  portalPubkey: Ident;
+  portalPubkey: Hex;
   frensArray: string[];
+  fren?: Fren;
 }
 
 export interface Portal {
@@ -130,7 +131,7 @@ export const createWakuNode = async () => {
 };
 
 const waku_SubToMessages = async () => {
-  const callback = (wakuMessage: any) => {
+  const callback = async (wakuMessage: any) => {
     console.log('New Waku message received:', wakuMessage);
     if (!wakuMessage.payload) return;
 
@@ -138,6 +139,9 @@ const waku_SubToMessages = async () => {
       const messageObj = PortalMessageDataPacket.decode(
         wakuMessage.payload,
       ) as unknown as PortalMessage;
+
+      const fren = await idStore.recoverSenderIfFren(messageObj.frensArray);
+      messageObj.fren = fren;
 
       if (Array.isArray(portalMessages[messageObj.portalId])) {
         portalMessages[messageObj.portalId].push(messageObj);
@@ -166,8 +170,9 @@ const waku_SubToMessages = async () => {
 };
 
 export const waku_SendPortalMessage = async (message: PortalMessage) => {
-  message.portalPubkey = idStore.getPortalIdent(message.portalId as any).publicKey;
-  message.frensArray = [];
+  const portalPubKey = idStore.getPortalIdent(message.portalId as any).publicKey;
+  message.portalPubkey = portalPubKey as Hex;
+  message.frensArray = await idStore.showYouReAFrenToAll(portalPubKey);
 
   try {
     const protoMessage = PortalMessageDataPacket.create(message);
