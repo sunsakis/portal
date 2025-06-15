@@ -32,7 +32,7 @@ class IdentStore {
 
         const payload = message + LES_BE_FREN_SIG_PREFIX + messageSig;
         const encryptedIdent = await EthCrypto.encryptWithPublicKey(wannabeFrenPortalKey.replace(/^0x/, ""), payload);
-        return portalId + LES_BE_FREN_PORTAL_ID_PREFIX + encryptedIdent;
+        return portalId + LES_BE_FREN_PORTAL_ID_PREFIX + JSON.stringify(encryptedIdent);
     }
 
     async hooWanaBeFrens(lesBeFrensRequest: Hex): Promise<Fren|undefined> {
@@ -42,7 +42,7 @@ class IdentStore {
             return undefined;
         }
 
-        const decryptedRequest = await portalIdent.decrypt(encryptedRequest);
+        const decryptedRequest = await portalIdent.decrypt(JSON.parse(encryptedRequest));
         const [message, messageSig] = decryptedRequest.split(LES_BE_FREN_SIG_PREFIX);
 
         const frenNik = message.split(LES_BE_FREN_MESSAGE)[1];

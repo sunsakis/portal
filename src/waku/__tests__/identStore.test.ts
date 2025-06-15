@@ -22,6 +22,8 @@ Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 describe('IdentStore', () => {
     let identStore: IdentStore;
     let testPrivateKey: Hex;
+    const portalId: `${string},${string}` = 'test,portal' as `${string},${string}`;
+
 
     beforeEach(() => {
         // Clear localStorage before each test
@@ -35,6 +37,7 @@ describe('IdentStore', () => {
         localStorageMock.setItem('live.portal.portalKey', testPrivateKey);
         
         identStore = new IdentStore();
+
     });
 
     describe('constructor', () => {
@@ -97,21 +100,31 @@ describe('IdentStore', () => {
     });
 
     describe('lesBeFrens and hooWanaBeFrens', () => {
+        let wannabeFrenIdentStore: IdentStore;
         let wannabeFren: Ident;
         let wannabeFrenPublicKey: Hex;
-        const portalId = 'test,portal' as `${string},${string}`;
 
         beforeEach(() => {
-            wannabeFren = Ident.createNewIdent();
+            wannabeFrenIdentStore = new IdentStore();
+            wannabeFren = wannabeFrenIdentStore.getMasterIdent();
             wannabeFrenPublicKey = wannabeFren.publicKey;
+            identStore.addPortalIdent(portalId);
         });
 
         it('should complete the friend request flow', async () => {
             const myNik = 'myNik';
-            const request = await identStore.lesBeFrens(myNik, wannabeFrenPublicKey, portalId);
+            const request = await wannabeFrenIdentStore.lesBeFrens(
+                myNik, 
+                identStore.getPortalIdent(portalId).publicKey, 
+                portalId
+            );
+
             expect(request).toBeDefined();
 
             const fren = await identStore.hooWanaBeFrens(request as unknown as Hex);
+
+            // const fren = await identStore.hooWanaBeFrens(request as unknown as Hex);
+
             expect(fren).toBeDefined();
             expect(fren?.nik).toBe(myNik);
         });

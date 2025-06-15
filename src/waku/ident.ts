@@ -34,13 +34,11 @@ class Ident {
     async encrypt(message: string) {
         const strippedPublicKey = this.publicKey.replace(/^0x/, "");
 
-        return EthCrypto.encryptWithPublicKey(strippedPublicKey, message);
+        return JSON.stringify( await EthCrypto.encryptWithPublicKey(strippedPublicKey, message));
     }
     
     async decrypt(message: any) {
-        console.log(this.privateKey);
-        console.log(this.publicKey);
-        return EthCrypto.decryptWithPrivateKey(this.privateKey.replace(/^0x/, ""), message as Encrypted);
+        return EthCrypto.decryptWithPrivateKey(this.privateKey, message as Encrypted);
     }
 
 
