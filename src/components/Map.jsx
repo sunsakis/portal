@@ -54,8 +54,7 @@ const ErrorToast = ({ error, onDismiss }) => {
       icon: '⚠️',
       title: 'Portal Creation Failed',
       message: errorMsg,
-      color: 'bg-gray-500',
-      suggestion: 'Please try again in a moment'
+      color: 'bg-gray-500'
     }
   }
 
