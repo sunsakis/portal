@@ -33,13 +33,10 @@ class IdentStore {
     const message = LES_BE_FREN_MESSAGE + myNik;
     const messageSig = await masterIdent.signMessage(message);
 
-    const payload = message + LES_BE_FREN_SIG_PREFIX + messageSig;
-    const encryptedIdent = await EthCrypto.encryptWithPublicKey(
-      wannabeFrenPortalKey,
-      payload,
-    );
-    return portalId + LES_BE_FREN_PORTAL_ID_PREFIX + encryptedIdent;
-  }
+        const payload = message + LES_BE_FREN_SIG_PREFIX + messageSig;
+        const encryptedIdent = await EthCrypto.encryptWithPublicKey(wannabeFrenPortalKey.replace(/^0x/, ""), payload);
+        return portalId + LES_BE_FREN_PORTAL_ID_PREFIX + JSON.stringify(encryptedIdent);
+    }
 
   async hooWanaBeFrens(lesBeFrensRequest: Hex): Promise<Fren | undefined> {
     const [portalId, encryptedRequest] = lesBeFrensRequest.split(
@@ -50,15 +47,15 @@ class IdentStore {
       return undefined;
     }
 
-    const decryptedRequest = await portalIdent.decrypt(encryptedRequest);
-    const [message, messageSig] = decryptedRequest.split(LES_BE_FREN_SIG_PREFIX);
+        const decryptedRequest = await portalIdent.decrypt(JSON.parse(encryptedRequest));
+        const [message, messageSig] = decryptedRequest.split(LES_BE_FREN_SIG_PREFIX);
 
-    const frenNik = message.split(LES_BE_FREN_MESSAGE)[1];
+        const frenNik = message.split(LES_BE_FREN_MESSAGE)[1];
 
-    const frenPublicKey = EthCrypto.recoverPublicKey(
-      messageSig,
-      EthCrypto.hash.keccak256(message),
-    );
+        const frenPublicKey = EthCrypto.recoverPublicKey(
+            messageSig,
+            EthCrypto.hash.keccak256(message)
+        );
 
     const fren = new Fren(frenPublicKey as Hex, frenNik);
 

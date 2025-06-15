@@ -32,7 +32,9 @@ class Ident {
     }
 
     async encrypt(message: string) {
-        return EthCrypto.encryptWithPublicKey(this.publicKey, message);
+        const strippedPublicKey = this.publicKey.replace(/^0x/, "");
+
+        return JSON.stringify( await EthCrypto.encryptWithPublicKey(strippedPublicKey, message));
     }
     
     async decrypt(message: any) {
@@ -63,7 +65,9 @@ class Fren {
     }
 
     async encrypt(message: string) {
-        return EthCrypto.encryptWithPublicKey(this.publicKey, message);
+        const strippedPublicKey = this.publicKey.replace(/^0x/, "");
+
+        return EthCrypto.encryptWithPublicKey(strippedPublicKey, message);
     }
     
 }
