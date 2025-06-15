@@ -61,6 +61,7 @@ export interface PortalMessage {
   portalPubkey: Hex;
   frensArray: string[];
   fren?: Fren;
+  isMyMessage: boolean;
 }
 
 export interface Portal {
@@ -142,6 +143,9 @@ const waku_SubToMessages = async () => {
 
       const fren = await idStore.recoverSenderIfFren(messageObj.frensArray);
       messageObj.fren = fren;
+      messageObj.isMyMessage =
+        messageObj.portalPubkey
+          === idStore.getPortalIdent(messageObj.portalId as any).publicKey;
 
       if (Array.isArray(portalMessages[messageObj.portalId])) {
         portalMessages[messageObj.portalId].push(messageObj);
