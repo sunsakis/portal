@@ -111,7 +111,6 @@ export default defineConfig({
           maps: ['leaflet', 'react-leaflet'],
           ui: ['framer-motion', '@use-gesture/react'],
           // ADD WAKU TO SEPARATE CHUNK
-          waku: ['@waku/sdk', 'protobufjs'],
           crypto: ['eth-crypto', 'viem', 'buffer', 'crypto-browserify'],
         },
       },
