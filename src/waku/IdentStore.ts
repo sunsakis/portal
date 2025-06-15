@@ -1,4 +1,5 @@
-import EthCrypto, { Encrypted } from 'eth-crypto';
+import EthCrypto, { Encrypted, hash } from 'eth-crypto';
+const { keccak256 } = hash;
 import { hashMessage, Hex, PrivateKeyAccount, verifyMessage } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import Ident, { Fren } from './ident';
@@ -67,6 +68,39 @@ class IdentStore {
 
     return fren;
   }
+
+  async showYouReAFrenToAll(portalPubKey: Hex, frenPubKey: Hex): Promise<string[]> {
+    const frenSignals = await Promise.all(Array.from(this.frens.values()).map(
+        fren => this._prepareShowYouReAFren(portalPubKey, fren.publicKey)
+    ));
+    return frenSignals;
+  };
+
+  async recoverSenderIfFren(secretIds: string[]): Promise<Fren | undefined> {
+    const anyFren = await Promise.all(secretIds.map(this._recoverFrenFromSecretId));
+    return anyFren.find((fren) => fren !== undefined);
+  }
+
+  private async _prepareShowYouReAFren(portalPubKey: Hex, frenPubKey: Hex): Promise<string> {
+    const messageSig = await this.masterIdent.signMessage(keccak256(portalPubKey));
+    const payload = portalPubKey + LES_BE_FREN_SIG_PREFIX + messageSig;
+    const encryptedPayload = await EthCrypto.encryptWithPublicKey(frenPubKey.replace(/^0x/, ""), payload);
+    return JSON.stringify(encryptedPayload);
+  }
+
+  private async _recoverFrenFromSecretId(secretId: string): Promise<Fren | undefined> {
+
+    const decryptedRequest = await this.masterIdent.decrypt(JSON.parse(secretId));
+    const [message, messageSig] = decryptedRequest.split(LES_BE_FREN_SIG_PREFIX);
+    
+    const recoveredPublicKey = EthCrypto.recoverPublicKey(
+        messageSig,
+        EthCrypto.hash.keccak256(message)
+    );
+
+    return this.getFrenByPublicKey(recoveredPublicKey as Hex);
+  }
+
   // GETTERS
   getMasterIdent(): Ident {
     return this.masterIdent;
@@ -87,6 +121,11 @@ class IdentStore {
   getFren(nik: string): Fren | undefined {
     return this.frens.get(nik);
   }
+
+  getFrenByPublicKey(publicKey: Hex): Fren | undefined {
+    return Array.from(this.frens.values()).find((fren) => fren.publicKey === publicKey);
+  }
+
   // IDENT MANAGEMENT
 
   addPortalIdent(portal: `${string},${string}`): Ident {
