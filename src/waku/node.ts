@@ -209,7 +209,7 @@ const waku_SubToFrenRequests = async () => {
 
 export const waku_acceptFriendRequest = async (fren: Fren) => {
   await waku_SendFrenMessage(
-    await idStore.lesBeFrens(customNickname, fren.publicKey, MASTER_PORTAL_ID),
+    await idStore.lesBeFrens(nickname, fren.publicKey, MASTER_PORTAL_ID),
   );
 };
 
