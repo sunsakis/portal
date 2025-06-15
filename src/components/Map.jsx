@@ -8,10 +8,84 @@ import { UserPortalMarker, OtherPortalsMarkers } from './MapMarkers'
 import ChatPortal from './ChatPortal'
 import MapLayers from './MapLayers'
 import ConnectionStatus from './ConnectionStatus'
+import MessageFlowOverlay from './MessageFlowOverlay'
+import { getWakuStatus } from '../waku/node'
 
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-defaulticon-compatibility'
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css'
+
+// UX-friendly error toast component
+const ErrorToast = ({ error, onDismiss }) => {
+  if (!error) return null
+
+  const getErrorConfig = (errorMsg) => {
+    if (errorMsg.includes('only') && errorMsg.includes('away')) {
+      return {
+        icon: '📍',
+        title: 'Too Close to Another Portal',
+        message: errorMsg,
+        color: 'bg-orange-500',
+        suggestion: 'Try moving at least 10 meters away from other portals'
+      }
+    }
+    
+    if (errorMsg.includes('GPS') || errorMsg.includes('location')) {
+      return {
+        icon: '🛰️',
+        title: 'Location Issue',
+        message: errorMsg,
+        color: 'bg-red-500',
+        suggestion: 'Make sure location services are enabled and try moving outdoors'
+      }
+    }
+    
+    if (errorMsg.includes('network') || errorMsg.includes('connection')) {
+      return {
+        icon: '📡',
+        title: 'Connection Problem',
+        message: errorMsg,
+        color: 'bg-blue-500',
+        suggestion: 'Check your internet connection and try again'
+      }
+    }
+    
+    return {
+      icon: '⚠️',
+      title: 'Portal Creation Failed',
+      message: errorMsg,
+      color: 'bg-gray-500'
+    }
+  }
+
+  const config = getErrorConfig(error)
+
+  return (
+    <motion.div
+      initial={{ y: -100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: -100, opacity: 0 }}
+      className={`fixed top-4 left-4 right-4 ${config.color} text-white rounded-lg shadow-xl z-[2000] mx-auto max-w-sm`}
+    >
+      <div className="p-4">
+        <div className="flex items-start gap-3">
+          <span className="text-2xl flex-shrink-0">{config.icon}</span>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-sm mb-1">{config.title}</h3>
+            <p className="text-sm opacity-90 mb-2">{config.message}</p>
+            <p className="text-xs opacity-75">{config.suggestion}</p>
+          </div>
+          <button
+            onClick={onDismiss}
+            className="text-white/60 hover:text-white text-lg leading-none"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
 
 export default function Map() {
   const { user, signInAnonymously } = useLocalAuth()
@@ -21,13 +95,29 @@ export default function Map() {
   const [selectedPortal, setSelectedPortal] = useState(null)
   const [showChatPortal, setShowChatPortal] = useState(false)
   const [isPlacingPin, setIsPlacingPin] = useState(false)
-  
-  // ALWAYS VISIBLE Debug Console for Mobile Testing
-  const [debugInfo, setDebugInfo] = useState([])
-  const [debugMinimized, setDebugMinimized] = useState(false)
+  const [wakuStatus, setWakuStatus] = useState('connecting')
+  const [portalError, setPortalError] = useState(null)
 
   // Default fallback location (Berlin Prenzlauer Berg) - Privacy-friendly
   const berlinPrenzlauerBerg = { latitude: 52.5396, longitude: 13.4127 }
+
+  // Check Waku status periodically
+  useEffect(() => {
+    const checkWakuStatus = () => {
+      try {
+        const status = getWakuStatus()
+        setWakuStatus(status)
+      } catch (err) {
+        console.error('Error checking Waku status:', err)
+        setWakuStatus('error')
+      }
+    }
+
+    checkWakuStatus()
+    const interval = setInterval(checkWakuStatus, 3000)
+    
+    return () => clearInterval(interval)
+  }, [])
 
   // Calculate distance between two coordinates (Haversine formula)
   const calculateDistance = useCallback((lat1, lon1, lat2, lon2) => {
@@ -89,103 +179,55 @@ export default function Map() {
     return [berlinPrenzlauerBerg.latitude, berlinPrenzlauerBerg.longitude]
   }, [userLocation, closestPortal, berlinPrenzlauerBerg])
 
-  // Debug logging - ALWAYS ACTIVE for mobile testing (FIXED - memoized to prevent loops)
-  const addDebugLog = useCallback((message, type = 'info') => {
-    const timestamp = new Date().toLocaleTimeString()
-    setDebugInfo(prev => [...prev.slice(-20), { timestamp, message, type }])
-    console.log(`[${timestamp}] ${type.toUpperCase()}: ${message}`)
-  }, []) // No dependencies to prevent loops
-
   // Auto sign-in anonymously for privacy
   useEffect(() => {
     if (!user) {
-      addDebugLog('Creating anonymous local user...', 'info')
       signInAnonymously()
     }
-  }, [user, signInAnonymously, addDebugLog])
+  }, [user, signInAnonymously])
 
-  // Initial debug info
+  // Auto-dismiss error after 8 seconds
   useEffect(() => {
-    addDebugLog('Portal app initialized (LOCAL MODE)', 'info')
-    addDebugLog(`Environment: ${import.meta.env.DEV ? 'DEVELOPMENT' : 'PRODUCTION'}`, 'info')
-    addDebugLog('Privacy mode: Local storage only', 'success')
-  }, [addDebugLog])
-
-  // Log map center changes (FIXED - only log when center actually changes)
-  const mapCenterString = `${mapCenter[0].toFixed(4)},${mapCenter[1].toFixed(4)}`
-  const prevMapCenterRef = useRef('')
-  
-  useEffect(() => {
-    if (prevMapCenterRef.current !== mapCenterString) {
-      prevMapCenterRef.current = mapCenterString
-      const centerType = userLocation ? 'User GPS' : 
-                        closestPortal ? `Closest Portal (${closestPortal.distance.toFixed(1)}km away)` : 
-                        'Berlin Prenzlauer Berg'
-      console.log(`Map center: ${centerType} [${mapCenterString}]`)
+    if (portalError) {
+      const timer = setTimeout(() => {
+        setPortalError(null)
+      }, 8000)
+      return () => clearTimeout(timer)
     }
-  }, [mapCenterString, userLocation, closestPortal])
-
-  // Log connection status changes (FIXED - only console.log, no addDebugLog)
-  useEffect(() => {
-    console.log(`Connection: ${connectionStatus} (LOCAL)`)
-  }, [connectionStatus])
-
-  // Log portal changes (FIXED - only console.log, no addDebugLog)
-  useEffect(() => {
-    console.log(`Portals nearby: ${portals.length}`)
-    if (userPortal) {
-      console.log(`User portal active: ${userPortal.id.slice(0, 8)}...`)
-    }
-    if (closestPortal) {
-      console.log(`Closest portal: ${closestPortal.distance.toFixed(1)}km away`)
-    }
-  }, [portals.length, userPortal?.id, closestPortal?.distance])
-
-  // Chat state logging (separate, no loops)
-  useEffect(() => {
-    console.log('Chat state - Selected portal:', selectedPortal?.id)
-    console.log('Chat state - Show chat:', showChatPortal)
-  }, [selectedPortal?.id, showChatPortal])
+  }, [portalError])
 
   const handleCreatePortal = async () => {
     if (!user || isPlacingPin) return
 
-    addDebugLog('Creating local portal...', 'info')
     setIsPlacingPin(true)
+    setPortalError(null) // Clear any previous errors
 
     try {
-      addDebugLog('Requesting GPS location...', 'info')
       const location = await getCurrentLocation()
-      addDebugLog(`Location: ${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)} (±${location.accuracy}m)`, 'success')
       
       const { data, error } = await createPortal(location)
 
       if (error) {
-        addDebugLog(`Portal creation failed: ${error}`, 'error')
-      } else {
-        addDebugLog(`Portal created: ${data.id.slice(0, 8)}...`, 'success')
+        setPortalError(error) // Show UX-friendly error
       }
     } catch (err) {
       const errorMsg = err.message || err.toString()
-      addDebugLog(`GPS error: ${errorMsg}`, 'error')
+      setPortalError(errorMsg) // Show UX-friendly error
     } finally {
       setIsPlacingPin(false)
     }
   }
 
   const handleClosePortal = async () => {
-    addDebugLog('Closing local portal...', 'info')
+    setPortalError(null) // Clear any errors
+    
     const { error } = await closePortal()
     if (error) {
-      addDebugLog(`Close failed: ${error}`, 'error')
-    } else {
-      addDebugLog('Portal closed successfully', 'success')
+      setPortalError(error) // Show UX-friendly error
     }
   }
 
   const handlePortalClick = (portal) => {
-    console.log('Portal clicked:', portal)
-    addDebugLog(`Opening chat for portal: ${portal.id.slice(0, 8)}...`, 'info')
     setSelectedPortal(portal)
     setShowChatPortal(true)
     
@@ -198,157 +240,23 @@ export default function Map() {
     }, 100)
   }
 
-  const handleClearData = () => {
-    addDebugLog('Clearing all local data...', 'warning')
-    localStorage.removeItem('portal_user')
-    localStorage.removeItem('portal_messages')
-    localStorage.removeItem('portal_data')
-    window.location.reload()
-  }
-
   return (
     <div className="relative h-screen w-full overflow-hidden">
+      {/* UX-Friendly Error Toast */}
+      <AnimatePresence>
+        <ErrorToast 
+          error={portalError} 
+          onDismiss={() => setPortalError(null)} 
+        />
+      </AnimatePresence>
+
       {/* Connection Status */}
       <ConnectionStatus 
-        connectionStatus={connectionStatus}
+        connectionStatus={connectionStatus === 'connected' ? 'connected' : connectionStatus === 'connecting' ? 'connecting' : 'error'}
         onRetry={() => {
-          addDebugLog('Manual refresh (local mode)', 'info')
           window.location.reload()
         }}
       />
-
-      {/* ALWAYS VISIBLE Debug Console for Mobile Testing */}
-      <motion.div
-        initial={{ x: debugMinimized ? '85%' : 0 }}
-        animate={{ x: debugMinimized ? '85%' : 0 }}
-        className="fixed top-16 right-2 w-72 max-h-80 bg-black/90 text-white z-[2000] flex flex-col rounded-lg shadow-xl border border-gray-700"
-      >
-        {/* Debug Header */}
-        <div className="flex items-center justify-between p-2 bg-black/80 border-b border-gray-600 rounded-t-lg">
-          <h3 className="text-xs font-bold">🐛 Debug Console (LOCAL)</h3>
-          <div className="flex gap-1">
-            <button
-              onClick={() => setDebugMinimized(!debugMinimized)}
-              className="text-white/60 hover:text-white text-xs px-1 py-0.5 rounded"
-            >
-              {debugMinimized ? '◀' : '▶'}
-            </button>
-            <button
-              onClick={() => setDebugInfo([])}
-              className="text-white/60 hover:text-white text-xs px-1 py-0.5 rounded"
-            >
-              🗑
-            </button>
-          </div>
-        </div>
-        
-        {!debugMinimized && (
-          <>
-            {/* Status Section */}
-            <div className="p-2 border-b border-gray-600 text-xs">
-              <div className="grid grid-cols-2 gap-1 text-xs">
-                <div>User: {user ? '✅' : '❌'}</div>
-                <div>Portal: {userPortal ? '🟢' : '⚪'}</div>
-                <div>Nearby: {portals.length}</div>
-                <div>GPS: {userLocation ? '🟢' : '🔴'}</div>
-                <div>Chat: {showChatPortal ? '💬' : '⚪'}</div>
-                <div>Selected: {selectedPortal ? '✅' : '❌'}</div>
-              </div>
-              <div className="mt-1 text-xs text-gray-300">
-                Mode: LOCAL STORAGE
-              </div>
-              <div className="text-xs text-gray-300">
-                Center: {userLocation ? 'GPS' : closestPortal ? 'Portal' : 'Berlin'}
-              </div>
-              {selectedPortal && (
-                <div className="text-xs text-yellow-300 mt-1">
-                  Chat Portal: {selectedPortal.id.slice(0, 8)}...
-                </div>
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="p-2 border-b border-gray-600">
-              <div className="flex gap-1 mb-1">
-                <button
-                  onClick={() => getCurrentLocation().then(loc => {
-                    addDebugLog(`GPS: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)} ±${loc.accuracy}m`, 'success')
-                  }).catch(err => {
-                    addDebugLog(`GPS failed: ${err.message}`, 'error')
-                  })}
-                  className="text-xs bg-green-600 px-2 py-1 rounded flex-1"
-                >
-                  Test GPS
-                </button>
-                <button
-                  onClick={() => {
-                    addDebugLog('Refreshing app...', 'info')
-                    window.location.reload()
-                  }}
-                  className="text-xs bg-blue-600 px-2 py-1 rounded flex-1"
-                >
-                  Refresh
-                </button>
-              </div>
-              <div className="flex gap-1 mb-1">
-                <button
-                  onClick={() => {
-                    if (userPortal) {
-                      addDebugLog('Testing user portal click...', 'info')
-                      handlePortalClick(userPortal)
-                    } else if (portals.length > 0) {
-                      addDebugLog('Testing first portal click...', 'info')
-                      handlePortalClick(portals[0])
-                    } else {
-                      addDebugLog('No portals to test', 'warning')
-                    }
-                  }}
-                  className="text-xs bg-purple-600 px-2 py-1 rounded flex-1"
-                >
-                  Test Chat
-                </button>
-                <button
-                  onClick={() => {
-                    addDebugLog('Force closing chat...', 'info')
-                    setShowChatPortal(false)
-                    setSelectedPortal(null)
-                  }}
-                  className="text-xs bg-orange-600 px-2 py-1 rounded flex-1"
-                >
-                  Close Chat
-                </button>
-              </div>
-              <button
-                onClick={handleClearData}
-                className="text-xs bg-red-600 px-2 py-1 rounded w-full"
-              >
-                Clear All Data
-              </button>
-            </div>
-
-            {/* Console Logs */}
-            <div className="flex-1 overflow-y-auto p-2 max-h-48">
-              <div className="text-xs space-y-1">
-                {debugInfo.length === 0 ? (
-                  <div className="text-gray-400">Console ready...</div>
-                ) : (
-                  debugInfo.slice(-8).map((log, i) => (
-                    <div key={i} className={`p-1 rounded text-xs ${
-                      log.type === 'error' ? 'bg-red-900/50 text-red-200' :
-                      log.type === 'success' ? 'bg-green-900/50 text-green-200' :
-                      log.type === 'warning' ? 'bg-yellow-900/50 text-yellow-200' :
-                      'bg-gray-800/50 text-gray-300'
-                    }`}>
-                      <span className="text-gray-400 text-xs">{log.timestamp}</span>
-                      <div className="text-xs">{log.message}</div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </>
-        )}
-      </motion.div>
 
       {/* Loading overlay */}
       <AnimatePresence>
@@ -365,7 +273,7 @@ export default function Map() {
               className="bg-white rounded-lg p-6 flex items-center gap-3 shadow-xl"
             >
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
-              <span className="font-medium">Getting your location...</span>
+              <span className="font-medium">Creating portal...</span>
             </motion.div>
           </motion.div>
         )}
@@ -375,7 +283,7 @@ export default function Map() {
       <MapContainer
         key={`${mapCenter[0]}-${mapCenter[1]}`} // Force re-render when center changes
         center={mapCenter}
-        zoom={13}
+        zoom={17}
         style={{ height: "100%", width: "100%" }}
         zoomControl={false}
         attributionControl={true}
@@ -400,13 +308,15 @@ export default function Map() {
           userId={user?.id}
           onPortalClick={handlePortalClick}
         />
+
+        {/* Message Flow Animation Overlay */}
+        <MessageFlowOverlay portals={portals} />
       </MapContainer>
 
       {/* Chat Portal Interface */}
       <ChatPortal
         isOpen={showChatPortal}
         onClose={() => {
-          addDebugLog('Chat closed', 'info')
           setShowChatPortal(false)
         }}
         portal={selectedPortal}
@@ -435,7 +345,7 @@ export default function Map() {
         {isPlacingPin ? (
           <>
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-            <span>Locating...</span>
+            <span>Creating...</span>
           </>
         ) : userPortal ? (
           <>
@@ -443,11 +353,36 @@ export default function Map() {
           </>
         ) : (
           <>
-            <span className="text-xl">🟢</span>
+            <span className="text-xl">🌀</span>
             <span>Open Portal</span>
           </>
         )}
       </motion.button>
+
+      {/* Hybrid Status Indicator */}
+      <div className="fixed top-4 right-4 z-[1500]">
+        <motion.div
+          animate={{ 
+            scale: (connectionStatus === 'connecting' || wakuStatus === 'connecting') ? [1, 1.2, 1] : 1,
+            opacity: (connectionStatus === 'connected' && wakuStatus === 'connected') ? 0.8 : 1
+          }}
+          transition={{ 
+            repeat: (connectionStatus === 'connecting' || wakuStatus === 'connecting') ? Infinity : 0,
+            duration: 1.5 
+          }}
+          className={`px-3 py-1 rounded-full text-xs font-medium ${
+            connectionStatus === 'connected' && wakuStatus === 'connected'
+              ? 'bg-green-500 text-white' 
+              : (connectionStatus === 'connecting' || wakuStatus === 'connecting')
+              ? 'bg-yellow-500 text-white'
+              : 'bg-red-500 text-white'
+          }`}
+        >
+          {connectionStatus === 'connected' && wakuStatus === 'connected' ? '🌀 Hybrid Online' : 
+           (connectionStatus === 'connecting' || wakuStatus === 'connecting') ? '🌀 Connecting...' : 
+           '🌀 Hybrid Offline'}
+        </motion.div>
+      </div>
     </div>
   )
 }

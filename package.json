@@ -19,9 +19,13 @@
     "pwa:preview": "vite build && vite preview"
   },
   "dependencies": {
+    "@browsery/util": "^0.12.6-r2",
     "@maptiler/leaflet-maptilersdk": "^2.0.0",
+    "@supabase/supabase-js": "^2.45.4",
     "@use-gesture/react": "^10.3.1",
-    "@waku/sdk": "0.0.32-4997440.0",
+    "@waku/sdk": "0.0.32-01af155.0",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.1",
     "eth-crypto": "^2.8.0",
     "framer-motion": "^11.11.1",
     "leaflet": "^1.9.4",
@@ -30,6 +34,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1",
+    "stream-browserify": "^3.0.0",
+    "util": "^0.12.5",
     "viem": "^2.31.2"
   },
   "devDependencies": {
@@ -51,6 +57,7 @@
     "terser": "^5.31.0",
     "ts-jest": "^29.4.0",
     "vite": "^5.4.10",
+    "vite-plugin-node-polyfills": "^0.23.0",
     "vite-plugin-pwa": "^0.20.5"
   },
   "engines": {

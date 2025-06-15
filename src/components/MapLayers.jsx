@@ -7,6 +7,9 @@ const MapLayers = ({ maptilerApiKey }) => {
   const [mapProvider, setMapProvider] = useState('maptiler')
   const [retryCount, setRetryCount] = useState(0)
 
+  // Use Streets Dark as the fixed default style
+  const currentStyle = 'streets-dark'
+
   useEffect(() => {
     if (!maptilerApiKey || mapProvider === 'osm') {
       return
@@ -19,19 +22,20 @@ const MapLayers = ({ maptilerApiKey }) => {
       try {
         layer = new MaptilerLayer({
           apiKey: maptilerApiKey,
-          style: 'streets-v2', // Single style - clean and readable
+          style: currentStyle,
           tileSize: 512,
           zoomOffset: -1,
           detectRetina: true,
           attribution: '© MapTiler © OpenStreetMap contributors'
         })
 
-        // Simple error handling - fail fast to OSM
+        // Error handling
         layer.on('tileerror', (e) => {
+          console.error(`MapTiler error for style ${currentStyle}:`, e)
           if (retryCount < 2) {
             setRetryCount(prev => prev + 1)
             retryTimeout = setTimeout(() => {
-              console.log(`MapTiler retry ${retryCount + 1}`)
+              console.log(`MapTiler retry ${retryCount + 1} for ${currentStyle}`)
             }, 1000)
           } else {
             console.log('MapTiler failed, using OpenStreetMap')
@@ -40,7 +44,7 @@ const MapLayers = ({ maptilerApiKey }) => {
         })
 
         layer.addTo(map)
-        console.log('MapTiler loaded successfully')
+        console.log(`MapTiler loaded successfully with style: ${currentStyle}`)
 
       } catch (error) {
         console.error('MapTiler init failed:', error)
@@ -71,7 +75,7 @@ const MapLayers = ({ maptilerApiKey }) => {
     )
   }
 
-  // MapTiler handles its own tiles
+  // MapTiler handles its own tiles with Streets Dark style
   return null
 }
 

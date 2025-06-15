@@ -1,4 +1,16 @@
 import { useEffect, useState, useCallback } from 'react'
+import { supabase } from '../supabase/portals'
+import { 
+  portalMessages, 
+  waku_SendPortalMessage 
+} from '../waku/node'
+
+// Generate portal ID from coordinates for Waku compatibility
+const generatePortalId = (latitude, longitude) => {
+  const x = Math.round(latitude * 1000000)
+  const y = Math.round(longitude * 1000000)
+  return `${x},${y}`
+}
 
 // Simple local user management - no external auth needed
 export const useLocalAuth = () => {
@@ -195,53 +207,85 @@ export const useGeolocation = () => {
   return { location, error, loading, getCurrentLocation }
 }
 
-// Local portal management with localStorage persistence
+// Portal management with server-side proximity checking
 export const useLocalPortals = (user) => {
   const [portals, setPortals] = useState([])
   const [userPortal, setUserPortal] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [connectionStatus, setConnectionStatus] = useState('connected') // Always connected in local mode
+  const [connectionStatus, setConnectionStatus] = useState('connecting')
 
-  // Load portals from localStorage on mount
+  // Fetch all portals from Supabase
+  const fetchPortals = useCallback(async () => {
+    try {
+      console.log('Fetching portals from Supabase...')
+      
+      const { data, error } = await supabase
+        .from('portals')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Supabase portal fetch error:', error)
+        setConnectionStatus('error')
+        return
+      }
+
+      console.log(`Fetched ${data.length} portals from Supabase`)
+      
+      // Add frontend compatibility fields
+      const formattedPortals = data.map(portal => ({
+        ...portal,
+        id: generatePortalId(portal.latitude, portal.longitude), // Generate ID for frontend compatibility
+        profiles: {
+          username: portal.user_id === user?.id ? 'You' : 'Anonymous',
+          avatar_url: null
+        }
+      }))
+      
+      setPortals(formattedPortals)
+      
+      // Find user's portal
+      const myPortal = formattedPortals.find(p => p.user_id === user?.id)
+      setUserPortal(myPortal || null)
+      
+      setConnectionStatus('connected')
+      
+    } catch (err) {
+      console.error('Error fetching portals:', err)
+      setConnectionStatus('error')
+    }
+  }, [user?.id])
+
+  // Monitor Supabase portals
   useEffect(() => {
     if (!user) return
 
-    const loadPortals = () => {
-      try {
-        const savedPortals = localStorage.getItem('portal_data')
-        if (savedPortals) {
-          const parsedPortals = JSON.parse(savedPortals)
-          
-          // Filter out expired portals
-          const activePortals = parsedPortals.filter(portal => {
-            const expiresAt = new Date(portal.expires_at)
-            return expiresAt > new Date() && portal.is_active
-          })
-          
-          setPortals(activePortals)
-          
-          // Find user's portal
-          const myPortal = activePortals.find(p => p.user_id === user.id)
-          setUserPortal(myPortal || null)
-          
-          // Save cleaned portals back to localStorage
-          localStorage.setItem('portal_data', JSON.stringify(activePortals))
-          
-          console.log(`Loaded ${activePortals.length} active portals`)
-        }
-      } catch (err) {
-        console.error('Error loading portals:', err)
-        localStorage.removeItem('portal_data')
-      }
+    console.log('Starting Supabase portal monitoring for user:', user.id)
+    
+    // Initial fetch
+    fetchPortals()
+    
+    // Set up realtime subscription
+    const channel = supabase
+      .channel('portals_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'portals'
+      }, payload => {
+        console.log('Supabase portal change:', payload)
+        fetchPortals()
+      })
+      .subscribe()
+    
+    // Poll for updates every 10 seconds
+    const interval = setInterval(fetchPortals, 10000)
+    
+    return () => {
+      clearInterval(interval)
+      channel.unsubscribe()
     }
-
-    loadPortals()
-    
-    // Cleanup expired portals every 30 seconds
-    const cleanupInterval = setInterval(loadPortals, 30000)
-    
-    return () => clearInterval(cleanupInterval)
-  }, [user])
+  }, [user, fetchPortals])
 
   const createPortal = async (location) => {
     if (!user) {
@@ -259,42 +303,47 @@ export const useLocalPortals = (user) => {
     }
 
     try {
-      const newPortal = {
-        id: `portal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        user_id: user.id,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        accuracy: location.accuracy || 100,
-        is_active: true,
-        created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
-        profiles: { 
-          username: user.email?.split('@')[0] || 'Anonymous', 
-          avatar_url: null 
-        }
+      setLoading(true)
+      console.log('Creating Supabase portal with server-side proximity check at:', location)
+      
+      // Call the server-side proximity check function
+      console.log('Calling server-side proximity check function...')
+      const { data, error } = await supabase.rpc('check_portal_proximity_and_create', {
+        p_latitude: location.latitude,
+        p_longitude: location.longitude,
+        p_user_id: user.id
+      })
+
+      if (error) {
+        console.error('Supabase RPC error:', error)
+        setLoading(false)
+        return { error: error.message || 'Portal creation failed' }
       }
 
-      // Get existing portals
-      const existingPortals = JSON.parse(localStorage.getItem('portal_data') || '[]')
+      console.log('Server response:', data)
+
+      // Handle server response
+      if (!data.success) {
+        console.log(`Server rejected portal: ${data.message}`)
+        if (data.error === 'PROXIMITY_VIOLATION') {
+          console.log(`Distance to nearest portal: ${data.distance}m`)
+        }
+        setLoading(false)
+        return { error: data.message }
+      }
+
+      // Success - portal created with server-side validation
+      console.log('Server-side portal creation successful:', data.data)
       
-      // Remove any existing portal by this user
-      const filteredPortals = existingPortals.filter(p => p.user_id !== user.id)
+      // Refresh portals list to show the new portal
+      await fetchPortals()
       
-      // Add new portal
-      const updatedPortals = [newPortal, ...filteredPortals]
-      
-      // Save to localStorage
-      localStorage.setItem('portal_data', JSON.stringify(updatedPortals))
-      
-      // Update state
-      setPortals(updatedPortals)
-      setUserPortal(newPortal)
-      
-      console.log('Portal created successfully:', newPortal.id)
-      return { data: newPortal, error: null }
+      setLoading(false)
+      return { data: data.data, error: null }
       
     } catch (err) {
       console.error('Portal creation failed:', err)
+      setLoading(false)
       return { error: err.message || 'Portal creation failed' }
     }
   }
@@ -305,20 +354,25 @@ export const useLocalPortals = (user) => {
     }
 
     try {
-      // Get existing portals
-      const existingPortals = JSON.parse(localStorage.getItem('portal_data') || '[]')
+      console.log('Closing Supabase portal at:', `${userPortal.latitude}, ${userPortal.longitude}`)
       
-      // Remove user's portal
-      const updatedPortals = existingPortals.filter(p => p.user_id !== user.id)
+      // Simply delete the portal
+      const { error } = await supabase
+        .from('portals')
+        .delete()
+        .eq('latitude', userPortal.latitude)
+        .eq('longitude', userPortal.longitude)
+        .eq('user_id', user.id)
+
+      if (error) {
+        console.error('Portal close failed:', error)
+        return { error: error.message }
+      }
       
-      // Save to localStorage
-      localStorage.setItem('portal_data', JSON.stringify(updatedPortals))
+      // Refresh portals list
+      await fetchPortals()
       
-      // Update state
-      setPortals(updatedPortals)
-      setUserPortal(null)
-      
-      console.log('Portal closed successfully')
+      console.log('Portal deleted successfully')
       return { error: null }
       
     } catch (err) {
@@ -337,65 +391,79 @@ export const useLocalPortals = (user) => {
   }
 }
 
-// Local message management for chat
+// Waku-powered message management for chat (unchanged)
 export const useLocalMessages = (portalId, user) => {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
 
-  // Load messages for specific portal
+  // Monitor Waku messages for this portal
   useEffect(() => {
     if (!portalId || !user) {
       setMessages([])
       return
     }
 
-    try {
-      const savedMessages = localStorage.getItem('portal_messages')
-      if (savedMessages) {
-        const allMessages = JSON.parse(savedMessages)
-        const portalMessages = allMessages.filter(msg => msg.portal_id === portalId)
-        setMessages(portalMessages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)))
+    console.log('Starting Waku message monitoring for portal:', portalId)
+
+    const updateMessages = () => {
+      try {
+        // Get messages for this portal from Waku
+        const wakuMessages = portalMessages[portalId] || []
+        
+        // Convert to frontend format
+        const formattedMessages = wakuMessages.map(msg => ({
+          id: `${msg.timestamp}_${Math.random().toString(36).substr(2, 9)}`,
+          portal_id: portalId,
+          user_id: `waku_user_${msg.timestamp}`, // Simple user identification
+          content: msg.message,
+          message_type: 'text',
+          created_at: new Date(msg.timestamp).toISOString(),
+          profiles: {
+            username: `User_${msg.timestamp.toString().slice(-4)}`,
+            avatar_url: null
+          }
+        }))
+
+        // Sort by timestamp
+        const sortedMessages = formattedMessages.sort((a, b) => 
+          new Date(a.created_at) - new Date(b.created_at)
+        )
+
+        setMessages(sortedMessages)
+        console.log(`Waku messages updated: ${sortedMessages.length} messages for portal ${portalId}`)
+        
+      } catch (err) {
+        console.error('Error processing Waku messages:', err)
       }
-    } catch (err) {
-      console.error('Error loading messages:', err)
-      localStorage.removeItem('portal_messages')
     }
+
+    // Initial update
+    updateMessages()
+    
+    // Poll for updates every 1 second
+    const interval = setInterval(updateMessages, 1000)
+    
+    return () => clearInterval(interval)
   }, [portalId, user])
 
   const sendMessage = async (content) => {
     if (!content.trim() || !portalId || !user) return false
 
     try {
-      const newMessage = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        portal_id: portalId,
-        user_id: user.id,
-        content: content.trim(),
-        message_type: 'text',
-        created_at: new Date().toISOString(),
-        profiles: {
-          username: user.email?.split('@')[0] || 'Anonymous',
-          avatar_url: null
-        }
-      }
+      console.log('Sending Waku message:', content, 'to portal:', portalId)
+      
+      // Send through Waku
+      await waku_SendPortalMessage({
+        portalId: portalId,
+        timestamp: Date.now(),
+        message: content.trim()
+      })
 
-      // Get existing messages
-      const existingMessages = JSON.parse(localStorage.getItem('portal_messages') || '[]')
-      
-      // Add new message
-      const updatedMessages = [...existingMessages, newMessage]
-      
-      // Save to localStorage
-      localStorage.setItem('portal_messages', JSON.stringify(updatedMessages))
-      
-      // Update state
-      setMessages(prev => [...prev, newMessage])
-      
-      console.log('Message sent:', newMessage.id)
+      console.log('Waku message sent successfully')
       return true
       
     } catch (err) {
-      console.error('Message send failed:', err)
+      console.error('Waku message send failed:', err)
       return false
     }
   }
