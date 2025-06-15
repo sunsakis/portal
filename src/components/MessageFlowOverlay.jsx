@@ -130,7 +130,8 @@ const FlowingMessage = ({ message }) => {
       className="absolute transform -translate-x-1/2 -translate-y-1/2"
       style={{ left: 0, top: 0 }}
     >
-      <div className="bg-white/95 backdrop-blur-sm text-gray-800 px-3 py-2 rounded-full shadow-lg border border-gray-200 max-w-[200px]">
+      {/* Dark green message bubble matching chat theme */}
+      <div className="bg-gray-700/95 backdrop-blur-sm text-white px-3 py-2 rounded-full shadow-lg border border-green-500/50 max-w-[200px]">
         <div className="text-xs font-medium text-center">
           {displayText}
         </div>
