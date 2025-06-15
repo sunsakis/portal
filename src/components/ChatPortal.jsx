@@ -1,29 +1,29 @@
-import React, { useEffect, useState, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useDrag } from '@use-gesture/react'
-import { useLocalMessages } from '../hooks/useLocalHooks'
-import { 
-  idStore, 
-  waku_SendFrenMessage, 
-  frenRequests, 
-  waku_acceptFriendRequest
-} from '../waku/node'
+import { useDrag } from '@use-gesture/react';
+import { AnimatePresence, motion } from 'framer-motion';
+import React, { useEffect, useRef, useState } from 'react';
+import { useLocalMessages } from '../hooks/useLocalHooks';
+import {
+  frenRequests,
+  idStore,
+  waku_acceptFriendRequest,
+  waku_SendFrenMessage,
+} from '../waku/node';
 
 // Enhanced Message Component with real friend request integration
 const MessageBubble = ({ msg, user, onUserClick }) => {
-  const isOwnMessage = msg.user_id === user?.id
+  const isOwnMessage = msg.user_id === user?.id;
 
   const formatTime = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    })
-  }
+    return new Date(timestamp).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
 
   const getUsername = (msg) => {
-    if (msg.user_id === user?.id) return 'You'
-    return msg.profiles?.username || 'Anonymous'
-  }
+    if (msg.user_id === user?.id) return 'You';
+    return msg.profiles?.username || 'Anonymous';
+  };
 
   const handleUserClick = () => {
     if (!isOwnMessage) {
@@ -32,10 +32,10 @@ const MessageBubble = ({ msg, user, onUserClick }) => {
         username: getUsername(msg),
         messageCount: 1,
         joinedAt: msg.created_at,
-        portalId: msg.portal_id // Include portal ID for friend requests
-      })
+        portalId: msg.portal_id, // Include portal ID for friend requests
+      });
     }
-  }
+  };
 
   return (
     <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
@@ -50,87 +50,86 @@ const MessageBubble = ({ msg, user, onUserClick }) => {
         }`}
       >
         {!isOwnMessage && (
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-5 h-5 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center">
-              <span className="text-xs font-bold text-white">
+          <div className='flex items-center gap-2 mb-1'>
+            <div className='w-5 h-5 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center'>
+              <span className='text-xs font-bold text-white'>
                 {getUsername(msg).charAt(0).toUpperCase()}
               </span>
             </div>
-            <div className="text-xs text-gray-300 font-medium">
+            <div className='text-xs text-gray-300 font-medium'>
               {getUsername(msg)}
             </div>
           </div>
         )}
-        
-        <div className="text-sm leading-relaxed">{msg.content}</div>
-        
-        <div className={`text-xs mt-1 flex items-center gap-1 ${
-          isOwnMessage ? 'text-green-200 justify-end' : 'text-gray-400'
-        }`}>
+
+        <div className='text-sm leading-relaxed'>{msg.content}</div>
+
+        <div
+          className={`text-xs mt-1 flex items-center gap-1 ${
+            isOwnMessage ? 'text-green-200 justify-end' : 'text-gray-400'
+          }`}
+        >
           <span>{formatTime(msg.created_at)}</span>
-          {!isOwnMessage && (
-            <div className="w-1 h-1 bg-gray-500 rounded-full"></div>
-          )}
+          {!isOwnMessage && <div className='w-1 h-1 bg-gray-500 rounded-full'></div>}
         </div>
       </motion.div>
     </div>
-  )
-}
+  );
+};
 
 // Enhanced User Profile Modal with real Waku friend requests
 const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal }) => {
-  const [isLoading, setIsLoading] = useState(false)
-  const [requestSent, setRequestSent] = useState(false)
-  const [error, setError] = useState(null)
+  const [isLoading, setIsLoading] = useState(false);
+  const [requestSent, setRequestSent] = useState(false);
+  const [error, setError] = useState(null);
 
-  if (!isOpen || !messageUser) return null
+  if (!isOpen || !messageUser) return null;
 
   const handleSendFriendRequest = async () => {
     if (!portal?.id || !messageUser.username) {
-      setError('Missing portal or username information')
-      return
+      setError('Missing portal or username information');
+      return;
     }
 
-    setIsLoading(true)
-    setError(null)
-    
+    setIsLoading(true);
+    setError(null);
+
     try {
       console.log('Sending friend request via Waku...', {
         username: messageUser.username,
-        portalId: portal.id
-      })
+        portalId: portal.id,
+      });
 
       // Get the portal identity for this specific portal
-      const portalIdent = idStore.getPortalIdent(portal.id)
-      
+      const portalIdent = idStore.getPortalIdent(portal.id);
+
       // Create friend request using the portal's public key
       // Use portal.id directly instead of MASTER_PORTAL_ID for portal-specific requests
       const friendRequest = await idStore.lesBeFrens(
-        messageUser.username, 
+        messageUser.username,
         portalIdent.publicKey,
-        portal.id
-      )
+        portal.id,
+      );
 
       // Send the friend request via Waku
-      await waku_SendFrenMessage(friendRequest)
-      
-      console.log('Friend request sent successfully via Waku')
-      setRequestSent(true)
-      
-      setTimeout(() => {
-        onClose()
-        setRequestSent(false)
-      }, 2000)
-      
-    } catch (error) {
-      console.error('Failed to send friend request:', error)
-      setError('Failed to send friend request. Please try again.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+      await waku_SendFrenMessage(friendRequest);
 
-  const isOwnProfile = messageUser.user_id === currentUser?.id
+      console.log('Friend request sent successfully via Waku');
+      setRequestSent(true);
+
+      setTimeout(() => {
+        onClose();
+        setRequestSent(false);
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to send friend request:', error);
+      setError('Failed to send friend request. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const isOwnProfile = messageUser.user_id === currentUser?.id;
 
   return (
     <AnimatePresence>
@@ -138,7 +137,7 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal })
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[2000]"
+        className='fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[2000]'
         onClick={onClose}
       >
         <motion.div
@@ -146,98 +145,103 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal })
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.8, opacity: 0, y: 20 }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="bg-gray-800 rounded-2xl p-6 m-4 max-w-sm w-full border border-gray-700 shadow-2xl"
+          className='bg-gray-800 rounded-2xl p-6 m-4 max-w-sm w-full border border-gray-700 shadow-2xl'
           onClick={(e) => e.stopPropagation()}
         >
           {/* Profile Header */}
-          <div className="text-center mb-6">
-            <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full mx-auto mb-4 flex items-center justify-center shadow-lg">
-              <span className="text-2xl font-bold text-white">
+          <div className='text-center mb-6'>
+            <div className='w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full mx-auto mb-4 flex items-center justify-center shadow-lg'>
+              <span className='text-2xl font-bold text-white'>
                 {(messageUser.username || 'Anonymous').charAt(0).toUpperCase()}
               </span>
             </div>
-            
-            <h2 className="text-xl font-semibold text-gray-100 mb-1">
+
+            <h2 className='text-xl font-semibold text-gray-100 mb-1'>
               {messageUser.username || 'Anonymous User'}
             </h2>
-            
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-gray-700 rounded-full">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-xs text-gray-300">Active in portal</span>
+
+            <div className='inline-flex items-center gap-2 px-3 py-1 bg-gray-700 rounded-full'>
+              <div className='w-2 h-2 bg-green-400 rounded-full animate-pulse'></div>
+              <span className='text-xs text-gray-300'>Active in portal</span>
             </div>
           </div>
 
           {/* Profile Stats */}
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className="text-center p-3 bg-gray-700/50 rounded-lg border border-gray-600">
-              <div className="text-lg font-bold text-green-400">
+          <div className='grid grid-cols-2 gap-4 mb-6'>
+            <div className='text-center p-3 bg-gray-700/50 rounded-lg border border-gray-600'>
+              <div className='text-lg font-bold text-green-400'>
                 {messageUser.messageCount || 1}
               </div>
-              <div className="text-xs text-gray-400">Messages</div>
+              <div className='text-xs text-gray-400'>Messages</div>
             </div>
-            <div className="text-center p-3 bg-gray-700/50 rounded-lg border border-gray-600">
-              <div className="text-lg font-bold text-blue-400">
+            <div className='text-center p-3 bg-gray-700/50 rounded-lg border border-gray-600'>
+              <div className='text-lg font-bold text-blue-400'>
                 {messageUser.joinedAt ? 'Active' : 'New'}
               </div>
-              <div className="text-xs text-gray-400">Status</div>
+              <div className='text-xs text-gray-400'>Status</div>
             </div>
           </div>
 
           {/* Error Message */}
           {error && (
-            <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg">
-              <p className="text-red-300 text-sm text-center">{error}</p>
+            <div className='mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg'>
+              <p className='text-red-300 text-sm text-center'>{error}</p>
             </div>
           )}
 
           {/* Action Buttons */}
-          <div className="space-y-3">
+          <div className='space-y-3'>
             {!isOwnProfile && (
               <>
-                {!requestSent ? (
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleSendFriendRequest}
-                    disabled={isLoading}
-                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-3 px-4 rounded-xl font-medium transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {isLoading ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        <span>Sending via Waku...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-lg">👋</span>
-                        <span>Send Friend Request</span>
-                      </>
-                    )}
-                  </motion.button>
-                ) : (
-                  <motion.div
-                    initial={{ scale: 0.8 }}
-                    animate={{ scale: 1 }}
-                    className="w-full bg-green-600 text-white py-3 px-4 rounded-xl font-medium flex items-center justify-center gap-2"
-                  >
-                    <span className="text-lg">✓</span>
-                    <span>Request Sent!</span>
-                  </motion.div>
-                )}
-                
+                {!requestSent
+                  ? (
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleSendFriendRequest}
+                      disabled={isLoading}
+                      className='w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-3 px-4 rounded-xl font-medium transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2'
+                    >
+                      {isLoading
+                        ? (
+                          <>
+                            <div className='w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin'>
+                            </div>
+                            <span>Sending via Waku...</span>
+                          </>
+                        )
+                        : (
+                          <>
+                            <span className='text-lg'>👋</span>
+                            <span>Send Friend Request</span>
+                          </>
+                        )}
+                    </motion.button>
+                  )
+                  : (
+                    <motion.div
+                      initial={{ scale: 0.8 }}
+                      animate={{ scale: 1 }}
+                      className='w-full bg-green-600 text-white py-3 px-4 rounded-xl font-medium flex items-center justify-center gap-2'
+                    >
+                      <span className='text-lg'>✓</span>
+                      <span>Request Sent!</span>
+                    </motion.div>
+                  )}
+
                 <button
                   onClick={onClose}
-                  className="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 py-3 px-4 rounded-xl font-medium transition-colors duration-200 border border-gray-600"
+                  className='w-full bg-gray-700 hover:bg-gray-600 text-gray-300 py-3 px-4 rounded-xl font-medium transition-colors duration-200 border border-gray-600'
                 >
                   Close
                 </button>
               </>
             )}
-            
+
             {isOwnProfile && (
               <button
                 onClick={onClose}
-                className="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 py-3 px-4 rounded-xl font-medium transition-colors duration-200 border border-gray-600"
+                className='w-full bg-gray-700 hover:bg-gray-600 text-gray-300 py-3 px-4 rounded-xl font-medium transition-colors duration-200 border border-gray-600'
               >
                 Close Profile
               </button>
@@ -246,91 +250,94 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, portal })
         </motion.div>
       </motion.div>
     </AnimatePresence>
-  )
-}
+  );
+};
 
 // Friend Request Notifications Component
 const FriendRequestNotifications = ({ user }) => {
-  const [showNotifications, setShowNotifications] = useState(false)
-  const [notifications, setNotifications] = useState([])
-  const [processedRequestIds, setProcessedRequestIds] = useState(new Set())
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [processedRequestIds, setProcessedRequestIds] = useState(new Set());
 
   useEffect(() => {
     // Load processed requests from localStorage on mount
-    const storedProcessed = localStorage.getItem('portal_processed_requests')
+    const storedProcessed = localStorage.getItem('portal_processed_requests');
     if (storedProcessed) {
       try {
-        setProcessedRequestIds(new Set(JSON.parse(storedProcessed)))
+        setProcessedRequestIds(new Set(JSON.parse(storedProcessed)));
       } catch (err) {
-        console.error('Error loading processed requests:', err)
+        console.error('Error loading processed requests:', err);
       }
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
     // Monitor incoming friend requests, filtering out already processed ones
     const checkFriendRequests = () => {
       if (frenRequests.length > 0) {
         const unprocessedRequests = frenRequests.filter(fren => {
-          const requestId = `${fren.nik}_${fren.publicKey}_${fren.address}`
-          return !processedRequestIds.has(requestId)
-        })
+          const requestId = `${fren.nik}_${fren.publicKey}_${fren.address}`;
+          return !processedRequestIds.has(requestId);
+        });
 
         if (unprocessedRequests.length !== notifications.length) {
-          setNotifications(unprocessedRequests)
-          setShowNotifications(unprocessedRequests.length > 0)
+          setNotifications(unprocessedRequests);
+          setShowNotifications(unprocessedRequests.length > 0);
         }
       } else if (notifications.length > 0) {
-        setNotifications([])
-        setShowNotifications(false)
+        setNotifications([]);
+        setShowNotifications(false);
       }
-    }
+    };
 
-    const interval = setInterval(checkFriendRequests, 1000)
-    return () => clearInterval(interval)
-  }, [notifications.length, processedRequestIds])
+    const interval = setInterval(checkFriendRequests, 1000);
+    return () => clearInterval(interval);
+  }, [notifications.length, processedRequestIds]);
 
   const markAsProcessed = (fren) => {
-    const requestId = `${fren.nik}_${fren.publicKey}_${fren.address}`
-    const updatedProcessed = new Set([...processedRequestIds, requestId])
-    setProcessedRequestIds(updatedProcessed)
-    localStorage.setItem('portal_processed_requests', JSON.stringify([...updatedProcessed]))
-  }
+    const requestId = `${fren.nik}_${fren.publicKey}_${fren.address}`;
+    const updatedProcessed = new Set([...processedRequestIds, requestId]);
+    setProcessedRequestIds(updatedProcessed);
+    localStorage.setItem(
+      'portal_processed_requests',
+      JSON.stringify([...updatedProcessed]),
+    );
+  };
 
   const handleAcceptRequest = async (fren, index) => {
     try {
-      await waku_acceptFriendRequest(fren)
-      console.log('Friend request accepted:', fren.nik)
-      
+      await waku_acceptFriendRequest(fren);
+      console.log('Friend request accepted:', fren.nik);
+
       // Mark as processed
-      markAsProcessed(fren)
-      
+      markAsProcessed(fren);
+
       // Remove from notifications
-      setNotifications(prev => prev.filter((_, i) => i !== index))
-      
+      setNotifications(prev => prev.filter((_, i) => i !== index));
+
       if (notifications.length <= 1) {
-        setShowNotifications(false)
+        setShowNotifications(false);
       }
     } catch (error) {
-      console.error('Failed to accept friend request:', error)
+      console.error('Failed to accept friend request:', error);
     }
-  }
+  };
 
   const handleDeclineRequest = (fren, index) => {
     // Mark as processed so it doesn't reappear
-    markAsProcessed(fren)
-    
-    // Remove from notifications
-    setNotifications(prev => prev.filter((_, i) => i !== index))
-    
-    if (notifications.length <= 1) {
-      setShowNotifications(false)
-    }
-    
-    console.log('Friend request declined:', fren.nik)
-  }
+    markAsProcessed(fren);
 
-  if (!showNotifications || notifications.length === 0) return null
+    // Remove from notifications
+    setNotifications(prev => prev.filter((_, i) => i !== index));
+
+    if (notifications.length <= 1) {
+      setShowNotifications(false);
+    }
+
+    console.log('Friend request declined:', fren.nik);
+  };
+
+  if (!showNotifications || notifications.length === 0) return null;
 
   return (
     <AnimatePresence>
@@ -338,50 +345,53 @@ const FriendRequestNotifications = ({ user }) => {
         initial={{ opacity: 0, y: -100 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -100 }}
-        className="fixed top-16 left-4 right-4 z-[2100] max-w-sm mx-auto"
+        className='fixed top-16 left-4 right-4 z-[2100] max-w-sm mx-auto'
       >
-        <div className="bg-gray-800 border border-gray-600 rounded-xl shadow-xl overflow-hidden">
-          <div className="p-3 bg-gray-700 border-b border-gray-600">
-            <div className="flex items-center justify-between">
-              <h3 className="text-white font-medium text-sm">Friend Requests</h3>
+        <div className='bg-gray-800 border border-gray-600 rounded-xl shadow-xl overflow-hidden'>
+          <div className='p-3 bg-gray-700 border-b border-gray-600'>
+            <div className='flex items-center justify-between'>
+              <h3 className='text-white font-medium text-sm'>Friend Requests</h3>
               <button
                 onClick={() => setShowNotifications(false)}
-                className="text-gray-400 hover:text-white"
+                className='text-gray-400 hover:text-white'
               >
                 ✕
               </button>
             </div>
           </div>
-          
-          <div className="max-h-64 overflow-y-auto">
+
+          <div className='max-h-64 overflow-y-auto'>
             {notifications.map((fren, index) => (
-              <div key={`${fren.nik}_${index}`} className="p-4 border-b border-gray-700 last:border-b-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                    <span className="text-white font-bold text-sm">
+              <div
+                key={`${fren.nik}_${index}`}
+                className='p-4 border-b border-gray-700 last:border-b-0'
+              >
+                <div className='flex items-center gap-3'>
+                  <div className='w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center'>
+                    <span className='text-white font-bold text-sm'>
                       {fren.nik.charAt(0).toUpperCase()}
                     </span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium truncate">
+                  <div className='flex-1 min-w-0'>
+                    <p className='text-white text-sm font-medium truncate'>
                       {fren.nik}
                     </p>
-                    <p className="text-gray-400 text-xs">
+                    <p className='text-gray-400 text-xs'>
                       Wants to be friends
                     </p>
                   </div>
                 </div>
-                
-                <div className="flex gap-2 mt-3">
+
+                <div className='flex gap-2 mt-3'>
                   <button
                     onClick={() => handleAcceptRequest(fren, index)}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-3 rounded-lg text-sm font-medium transition-colors"
+                    className='flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-3 rounded-lg text-sm font-medium transition-colors'
                   >
                     Accept
                   </button>
                   <button
                     onClick={() => handleDeclineRequest(fren, index)}
-                    className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-3 rounded-lg text-sm font-medium transition-colors"
+                    className='flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-3 rounded-lg text-sm font-medium transition-colors'
                   >
                     Decline
                   </button>
@@ -392,76 +402,76 @@ const FriendRequestNotifications = ({ user }) => {
         </div>
       </motion.div>
     </AnimatePresence>
-  )
-}
+  );
+};
 
 // Main Chat Portal Component (removed duplicate FriendRequestNotifications)
 const ChatPortal = ({ isOpen, onClose, portal, user }) => {
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState(null)
-  const [selectedUser, setSelectedUser] = useState(null)
-  const [showUserProfile, setShowUserProfile] = useState(false)
-  const messagesEndRef = useRef(null)
-  const inputRef = useRef(null)
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [showUserProfile, setShowUserProfile] = useState(false);
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
 
-  const { messages, loading, sendMessage } = useLocalMessages(portal?.id, user)
+  const { messages, loading, sendMessage } = useLocalMessages(portal?.id, user);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+    scrollToBottom();
+  }, [messages]);
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 300)
+      setTimeout(() => inputRef.current?.focus(), 300);
     }
-  }, [isOpen])
+  }, [isOpen]);
 
   const handleSendMessage = async () => {
-    if (!message.trim() || !portal?.id || !user) return
+    if (!message.trim() || !portal?.id || !user) return;
 
-    const messageContent = message.trim()
-    setMessage('')
-    setError(null)
+    const messageContent = message.trim();
+    setMessage('');
+    setError(null);
 
     try {
-      const success = await sendMessage(messageContent)
+      const success = await sendMessage(messageContent);
       if (!success) {
-        setMessage(messageContent)
-        setError('Failed to send message')
+        setMessage(messageContent);
+        setError('Failed to send message');
       }
     } catch (err) {
-      console.error('Message send error:', err)
-      setMessage(messageContent)
-      setError('Failed to send message')
+      console.error('Message send error:', err);
+      setMessage(messageContent);
+      setError('Failed to send message');
     }
-  }
+  };
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSendMessage()
+      e.preventDefault();
+      handleSendMessage();
     }
-  }
+  };
 
   const handleUserClick = (messageUser) => {
-    setSelectedUser(messageUser)
-    setShowUserProfile(true)
-  }
+    setSelectedUser(messageUser);
+    setShowUserProfile(true);
+  };
 
   const bind = useDrag(
     ({ last, velocity: [, vy], direction: [, dy], movement: [, my] }) => {
       if (last && (my > 100 || (vy > 0.5 && dy > 0))) {
-        onClose()
+        onClose();
       }
     },
-    { from: () => [0, 0], filterTaps: true, bounds: { top: 0 }, rubberband: true }
-  )
+    { from: () => [0, 0], filterTaps: true, bounds: { top: 0 }, rubberband: true },
+  );
 
-  if (!portal) return null
+  if (!portal) return null;
 
   return (
     <AnimatePresence>
@@ -471,96 +481,103 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.5 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black"
+            className='fixed inset-0 bg-black'
             style={{ zIndex: 1800 }}
             onClick={onClose}
           />
-          
+
           <motion.div
             {...bind()}
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed bottom-0 left-0 right-0 bg-gray-900 rounded-t-3xl touch-none flex flex-col"
-            role="dialog"
-            aria-modal="true"
-            style={{ 
-              maxHeight: '70vh', 
+            className='fixed bottom-0 left-0 right-0 bg-gray-900 rounded-t-3xl touch-none flex flex-col'
+            role='dialog'
+            aria-modal='true'
+            style={{
+              maxHeight: '70vh',
               zIndex: 1900,
-              paddingBottom: 'env(safe-area-inset-bottom, 20px)'
+              paddingBottom: 'env(safe-area-inset-bottom, 20px)',
             }}
           >
-            <div className="flex justify-center pt-3 pb-2">
-              <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
+            <div className='flex justify-center pt-3 pb-2'>
+              <div className='w-10 h-1 bg-gray-600 rounded-full'></div>
             </div>
 
-            <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center">
-                  <span className="text-lg">💬</span>
+            <div className='flex items-center justify-between px-4 py-2 border-b border-gray-700'>
+              <div className='flex items-center gap-3'>
+                <div className='w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center'>
+                  <span className='text-lg'>💬</span>
                 </div>
                 <div>
-                  <h3 className="text-gray-100 font-medium">Portal Chat</h3>
-                  <p className="text-xs text-gray-400">{messages.length} messages</p>
+                  <h3 className='text-gray-100 font-medium'>Portal Chat</h3>
+                  <p className='text-xs text-gray-400'>{messages.length} messages</p>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span className="text-xs text-gray-400">p2p</span>
+              <div className='flex items-center gap-1'>
+                <div className='w-2 h-2 bg-green-400 rounded-full animate-pulse'></div>
+                <span className='text-xs text-gray-400'>p2p</span>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
-              {loading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-400 mx-auto"></div>
-                  <p className="text-gray-400 mt-2">Loading messages...</p>
-                </div>
-              ) : error ? (
-                <div className="text-center py-8">
-                  <div className="text-4xl mb-2">⚠️</div>
-                  <p className="text-red-400 text-sm">{error}</p>
-                </div>
-              ) : messages.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-xl mb-2">💬</div>
-                  <p className="text-gray-300">
-                    Start a conversation with people at this location!
-                  </p>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Tap messages to send friend requests
-                  </p>
-                </div>
-              ) : (
-                messages.map((msg) => (
-                  <MessageBubble
-                    key={msg.id}
-                    msg={msg}
-                    user={user}
-                    onUserClick={handleUserClick}
-                  />
-                ))
-              )}
+            <div className='flex-1 overflow-y-auto p-4 space-y-3 min-h-0'>
+              {loading
+                ? (
+                  <div className='text-center py-8'>
+                    <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-green-400 mx-auto'>
+                    </div>
+                    <p className='text-gray-400 mt-2'>Loading messages...</p>
+                  </div>
+                )
+                : error
+                ? (
+                  <div className='text-center py-8'>
+                    <div className='text-4xl mb-2'>⚠️</div>
+                    <p className='text-red-400 text-sm'>{error}</p>
+                  </div>
+                )
+                : messages.length === 0
+                ? (
+                  <div className='text-center py-8'>
+                    <div className='text-xl mb-2'>💬</div>
+                    <p className='text-gray-300'>
+                      Start a conversation with people at this location!
+                    </p>
+                    <p className='text-xs text-gray-500 mt-2'>
+                      Tap messages to send friend requests
+                    </p>
+                  </div>
+                )
+                : (
+                  messages.map((msg) => (
+                    <MessageBubble
+                      key={msg.id}
+                      msg={msg}
+                      user={user}
+                      onUserClick={handleUserClick}
+                    />
+                  ))
+                )}
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="flex-shrink-0 p-4 border-t border-gray-700">
+            <div className='flex-shrink-0 p-4 border-t border-gray-700'>
               {error && (
-                <div className="mb-2 text-center">
-                  <p className="text-red-400 text-xs">{error}</p>
+                <div className='mb-2 text-center'>
+                  <p className='text-red-400 text-xs'>{error}</p>
                 </div>
               )}
-              <div className="flex items-end gap-2">
-                <div className="flex-1 relative">
+              <div className='flex items-end gap-2'>
+                <div className='flex-1 relative'>
                   <textarea
                     ref={inputRef}
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyPress={handleKeyPress}
-                    placeholder="Type a message..."
-                    className="w-full px-4 py-3 bg-gray-800 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors"
-                    rows="1"
+                    placeholder='Type a message...'
+                    className='w-full px-4 py-3 bg-gray-800 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors'
+                    rows='1'
                     style={{ minHeight: '44px', maxHeight: '100px' }}
                   />
                 </div>
@@ -574,7 +591,7 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
                   }`}
                   style={{ minWidth: '44px', height: '44px' }}
                 >
-                  <span className="text-lg">➤</span>
+                  <span className='text-lg'>➤</span>
                 </button>
               </div>
             </div>
@@ -583,8 +600,8 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
           <UserProfileModal
             isOpen={showUserProfile}
             onClose={() => {
-              setShowUserProfile(false)
-              setSelectedUser(null)
+              setShowUserProfile(false);
+              setSelectedUser(null);
             }}
             messageUser={selectedUser}
             currentUser={user}
@@ -593,7 +610,7 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
         </>
       )}
     </AnimatePresence>
-  )
-}
+  );
+};
 
-export default ChatPortal
+export default ChatPortal;

@@ -1,6 +1,13 @@
-import { createLightNode, Decoder, Encoder, LightNode, Protocols } from '@waku/sdk';
+import { createLightNode, LightNode, Protocols } from '@waku/sdk';
 import { createDecoder, createEncoder } from '@waku/sdk';
+import blockies from 'ethereum-blockies';
 import protobuf from 'protobufjs';
+import {
+  adjectives,
+  animals,
+  colors,
+  uniqueNamesGenerator,
+} from 'unique-names-generator';
 import { Hex } from 'viem';
 import Ident, { Fren } from './ident';
 import IdentStore, { MASTER_PORTAL_ID } from './IdentStore';
@@ -15,9 +22,8 @@ export const CLUSTER_ID = 42;
 export const SHARD_ID = 0;
 export let wakuIsReady = false;
 
-export let nickname = 'mico';
-
 export const idStore = new IdentStore();
+export let customNickname = 'W3PN hacker';
 
 // Only message encoder/decoder needed
 const portal_message_encoder = createEncoder({
@@ -42,7 +48,8 @@ const PortalMessageDataPacket = new protobuf.Type('PortalMessageDataPacket')
   .add(new protobuf.Field('portalId', 1, 'string'))
   .add(new protobuf.Field('timestamp', 2, 'uint64'))
   .add(new protobuf.Field('message', 3, 'string'))
-  .add(new protobuf.Field('portalPubkey', 4, 'string'));
+  .add(new protobuf.Field('portalPubkey', 4, 'string'))
+  .add(new protobuf.Field('frensArray', 5, 'string', 'repeated'));
 
 const FriendRequestDataPacket = new protobuf.Type('FrenDataPacket')
   .add(new protobuf.Field('request', 1, 'string'));
@@ -52,6 +59,7 @@ export interface PortalMessage {
   timestamp: number;
   message: string;
   portalPubkey: Ident;
+  frensArray: string[];
 }
 
 export interface Portal {
@@ -158,9 +166,8 @@ const waku_SubToMessages = async () => {
 };
 
 export const waku_SendPortalMessage = async (message: PortalMessage) => {
-  console.log('Sending Waku message:', message);
-
-  message.portalPubkey = idStore.getPortalIdent(message.portalId as any);
+  message.portalPubkey = idStore.getPortalIdent(message.portalId as any).publicKey;
+  message.frensArray = [];
 
   try {
     const protoMessage = PortalMessageDataPacket.create(message);
@@ -202,7 +209,7 @@ const waku_SubToFrenRequests = async () => {
 
 export const waku_acceptFriendRequest = async (fren: Fren) => {
   await waku_SendFrenMessage(
-    await idStore.lesBeFrens(nickname, fren.publicKey, MASTER_PORTAL_ID),
+    await idStore.lesBeFrens(customNickname, fren.publicKey, MASTER_PORTAL_ID),
   );
 };
 
@@ -226,4 +233,16 @@ export const getWakuStatus = () => {
   if (peers.length === 0) return 'connecting';
 
   return 'connected';
+};
+
+export const getPetName = (portalId: string) => {
+  return uniqueNamesGenerator({
+    seed: portalId,
+    dictionaries: [animals, colors, adjectives],
+    separator: '-',
+  });
+};
+
+export const getAvatar = (portalId: string) => {
+  return blockies.create({ seed: 'your-unique-id' });
 };
