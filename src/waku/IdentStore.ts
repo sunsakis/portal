@@ -11,6 +11,7 @@ const LES_BE_FREN_MESSAGE = "Lesbe Frens! I'm ";
 const LES_BE_FREN_SIG_PREFIX = 'SSS';
 const LES_BE_FREN_PORTAL_ID_PREFIX = 'PPP';
 
+export const MASTER_PORTAL_ID = "master,key" as `${string},${string}`;
 // TODO: add safePersistence edits, and call them on add
 // TODO: prune portalIdents
 class IdentStore {
@@ -27,35 +28,40 @@ class IdentStore {
   async lesBeFrens(
     myNik: string,
     wannabeFrenPortalKey: Hex,
-    portalId: `${string},${string}`,
+    portalId: `${string},${string}` = MASTER_PORTAL_ID as `${string},${string}`,
   ): Promise<string> {
     const masterIdent = this.getMasterIdent();
     const message = LES_BE_FREN_MESSAGE + myNik;
     const messageSig = await masterIdent.signMessage(message);
 
-        const payload = message + LES_BE_FREN_SIG_PREFIX + messageSig;
-        const encryptedIdent = await EthCrypto.encryptWithPublicKey(wannabeFrenPortalKey.replace(/^0x/, ""), payload);
-        return portalId + LES_BE_FREN_PORTAL_ID_PREFIX + JSON.stringify(encryptedIdent);
-    }
+    const payload = message + LES_BE_FREN_SIG_PREFIX + messageSig;
+    const encryptedIdent = await EthCrypto.encryptWithPublicKey(wannabeFrenPortalKey.replace(/^0x/, ""), payload);
+    return portalId + LES_BE_FREN_PORTAL_ID_PREFIX + JSON.stringify(encryptedIdent);
+  }
 
   async hooWanaBeFrens(lesBeFrensRequest: Hex): Promise<Fren | undefined> {
     const [portalId, encryptedRequest] = lesBeFrensRequest.split(
       LES_BE_FREN_PORTAL_ID_PREFIX,
     );
-    const portalIdent = this.getPortalIdent(portalId as `${string},${string}`);
+    let portalIdent: Ident;
+    if (portalId === MASTER_PORTAL_ID) {
+        portalIdent = this.masterIdent;
+    } else {
+     portalIdent = this.getPortalIdent(portalId as `${string},${string}`);
+    }
     if (!portalIdent) {
       return undefined;
     }
 
-        const decryptedRequest = await portalIdent.decrypt(JSON.parse(encryptedRequest));
-        const [message, messageSig] = decryptedRequest.split(LES_BE_FREN_SIG_PREFIX);
+    const decryptedRequest = await portalIdent.decrypt(JSON.parse(encryptedRequest));
+    const [message, messageSig] = decryptedRequest.split(LES_BE_FREN_SIG_PREFIX);
 
-        const frenNik = message.split(LES_BE_FREN_MESSAGE)[1];
+    const frenNik = message.split(LES_BE_FREN_MESSAGE)[1];
 
-        const frenPublicKey = EthCrypto.recoverPublicKey(
-            messageSig,
-            EthCrypto.hash.keccak256(message)
-        );
+    const frenPublicKey = EthCrypto.recoverPublicKey(
+        messageSig,
+        EthCrypto.hash.keccak256(message)
+    );
 
     const fren = new Fren(frenPublicKey as Hex, frenNik);
 
