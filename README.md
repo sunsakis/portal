@@ -8,10 +8,6 @@ Start it up by running it as a Vite server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
+
+And wait for p2p to establish :)
