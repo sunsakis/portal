@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { registerSW } from 'virtual:pwa-register';
-import AuthScreen from './components/AuthScreen';
-import InstallPrompt from './components/InstallPrompt';
 import Map from './components/Map';
 import { useLocalAuth } from './hooks/useLocalHooks';
 import './App.css';
@@ -63,22 +61,6 @@ function App() {
       </div>
     );
   }
-
-  // For local development, skip auth and go straight to map
-  // Uncomment the auth screen below if you want to test the auth UI
-
-  // if (!isAuthenticated) {
-  //   return (
-  //     <>
-  //       <AuthScreen
-  //         onAuth={handleAuth}
-  //         loading={loading}
-  //         error={error}
-  //       />
-  //       <InstallPrompt />
-  //     </>
-  //   )
-  // }
 
   // Show main app (user is auto-created anonymously)
   return (
