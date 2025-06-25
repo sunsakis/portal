@@ -478,7 +478,7 @@ export default function Map() {
       />
 
       {/* Main Action Button */}
-      <motion.button
+      {/* <motion.button
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         whileHover={{ scale: 1.05 }}
@@ -516,7 +516,7 @@ export default function Map() {
               <span>Open Portal</span>
             </>
           )}
-      </motion.button>
+      </motion.button> */}
 
       {/* Enhanced Hybrid Status Indicator */}
       <div className='fixed top-4 right-4 z-[1500]'>
