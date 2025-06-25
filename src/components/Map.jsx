@@ -10,7 +10,6 @@ import {
 } from '../hooks/useLocalHooks';
 import { frenRequests, getWakuStatus } from '../waku/node';
 import ChatPortal from './ChatPortal';
-import ConnectionStatus from './ConnectionStatus';
 import { MapControls, MapEventHandler } from './MapControls';
 import MapLayers from './MapLayers';
 import { OtherPortalsMarkers, UserPortalMarker } from './MapMarkers';
@@ -325,17 +324,6 @@ export default function Map() {
         onShowRequests={() => setShowFriendRequests(true)}
       />
 
-      {/* Connection Status */}
-      <ConnectionStatus
-        connectionStatus={connectionStatus === 'connected'
-          ? 'connected'
-          : connectionStatus === 'connecting'
-          ? 'connecting'
-          : 'error'}
-        onRetry={() => {
-          window.location.reload();
-        }}
-      />
 
       {/* Loading overlay */}
       <AnimatePresence>
