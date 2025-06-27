@@ -19,6 +19,8 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet-defaulticon-compatibility';
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css';
 
+const maptilerApiKey = import.meta.env.VITE_MAPTILER_API;
+
 // Enhanced Friend Request Status Indicator
 const FriendRequestIndicator = ({ friendRequests, onShowRequests }) => {
   if (friendRequests.length === 0) return null;
@@ -141,8 +143,8 @@ export default function Map() {
   const [portalError, setPortalError] = useState(null);
   const [showFriendRequests, setShowFriendRequests] = useState(false);
 
-  // Default fallback location (Berlin Prenzlauer Berg) - Privacy-friendly
-  const berlinPrenzlauerBerg = { latitude: 52.5396, longitude: 13.4127 };
+  // Default hardcoded location
+  const staticLocation = { latitude: 56.96472220, longitude: 24.01670780 };
 
   // Check Waku status periodically
   useEffect(() => {
@@ -189,7 +191,7 @@ export default function Map() {
   const closestPortal = useMemo(() => {
     if (!portals || portals.length === 0) return null;
 
-    const referenceLocation = userLocation || berlinPrenzlauerBerg;
+    const referenceLocation = userLocation || staticLocation;
 
     let closest = portals[0];
     let minDistance = calculateDistance(
@@ -214,7 +216,7 @@ export default function Map() {
     }
 
     return { portal: closest, distance: minDistance };
-  }, [portals, userLocation, calculateDistance, berlinPrenzlauerBerg]);
+  }, [portals, userLocation, calculateDistance, staticLocation]);
 
   // Dynamic map center: user location > closest portal > Berlin Prenzlauer Berg
   const mapCenter = useMemo(() => {
@@ -229,8 +231,8 @@ export default function Map() {
     }
 
     // Priority 3: Berlin Prenzlauer Berg fallback
-    return [berlinPrenzlauerBerg.latitude, berlinPrenzlauerBerg.longitude];
-  }, [userLocation, closestPortal, berlinPrenzlauerBerg]);
+    return [staticLocation.latitude, staticLocation.longitude];
+  }, [userLocation, closestPortal, staticLocation]);
 
   // Auto sign-in anonymously for privacy
   useEffect(() => {
@@ -425,7 +427,7 @@ export default function Map() {
       <MapContainer
         key={`${mapCenter[0]}-${mapCenter[1]}`}
         center={mapCenter}
-        zoom={17}
+        zoom={10}
         style={{ height: '100%', width: '100%' }}
         zoomControl={false}
         attributionControl={true}
@@ -436,7 +438,7 @@ export default function Map() {
         boxZoom={true}
         keyboard={true}
       >
-        <MapLayers maptilerApiKey={'3jQtUM6LUB5aAtjviX9u'} />
+        <MapLayers maptilerApiKey={maptilerApiKey} />
         <MapControls />
         <MapEventHandler />
 

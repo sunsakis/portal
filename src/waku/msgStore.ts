@@ -6,10 +6,10 @@ import {
 import {
     portal_message_decoder, 
     PortalMessageDataPacket,
-    TOPIC_PORTALS_MESSAGE,
     PortalMessage 
 } from "./node";
 
+//TODO: Add SDS
 export class MessageStore {
   private node: LightNode;
 
@@ -25,7 +25,7 @@ export class MessageStore {
         
         // Add query options to prevent database overload
         const queryOptions = {
-            paginationLimit: 50, // Fixed typo: was "paginatiomLimit"
+            paginationLimit: 50, // Limit to 50 messages
             timeStart: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
             timeEnd: new Date(), // Current time
             paginationForward: false, // false = newest first

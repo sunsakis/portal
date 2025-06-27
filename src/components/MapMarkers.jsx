@@ -4,7 +4,7 @@ import { Marker, Popup, useMap } from 'react-leaflet';
 
 // Enhanced portal icon with message activity indicator
 export const createPortalIcon = (isUserPortal = false, zoom = 13, hasRecentActivity = false) => {
-  const emoji = '💬';
+  const emoji = '🟢';
   const pulseColor = hasRecentActivity 
     ? 'rgba(59, 130, 246, 0.6)' // Blue pulse for activity
     : 'rgba(34, 197, 94, 0.4)'; // Green pulse for normal
