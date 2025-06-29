@@ -1,7 +1,7 @@
 import { useDrag } from '@use-gesture/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import React, { useEffect, useRef, useState } from 'react';
-import { useLocalMessages } from '../hooks/useLocalHooks';
+import { useLocalMessages } from '../hooks/supaHooks';
 import {
   frenRequests,
   getPetName, // Import getPetName function

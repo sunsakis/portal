@@ -7,7 +7,7 @@ import {
   useGeolocation,
   useLocalAuth,
   useLocalPortals,
-} from '../hooks/useLocalHooks';
+} from '../hooks/supaHooks';
 import { frenRequests, getWakuStatus } from '../waku/node';
 import ChatPortal from './ChatPortal';
 import { MapControls, MapEventHandler } from './MapControls';
