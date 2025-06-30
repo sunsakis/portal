@@ -9,6 +9,7 @@ export const createEventIcon = (category = 'social', isMyEvent = false, attendee
   // Use custom emoji if provided, otherwise fall back to category emoji
   const emoji = customEmoji;
   const pulseColor = '#10B981'
+  const borderColor = isMyEvent ? '#10B981' : color; // Orange border for user's events
   
   // Truncate title if too long for the marker
   const truncatedTitle = eventTitle.length > 10 ? eventTitle.substring(0, 10) + '...' : eventTitle.toUpperCase();

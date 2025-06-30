@@ -39,32 +39,36 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
     }
   }, [isOpen])
 
-  const handleSubmit = async () => {
+  const validateAndCreateEvent = async () => {
     setError(null)
 
+    // Check for missing title
     if (!eventData.title.trim()) {
-      setError('Event title is required')
+      setError('Please enter a title for your event')
       return
     }
 
+    // Check for missing emoji
     if (!eventData.emoji) {
-      setError('Please select an emoji for your event')
+      setError('Please select an emoji for your event - click the emoji button to choose one')
       return
     }
 
+    // Check date/time validity
     const startDateTime = new Date(`${eventData.startDate}T${eventData.startTime}`)
     const endDateTime = new Date(`${eventData.endDate}T${eventData.endTime}`)
 
     if (startDateTime >= endDateTime) {
-      setError('End time must be after start time')
+      setError('The end time must be after the start time')
       return
     }
 
     if (startDateTime < new Date()) {
-      setError('Event cannot be in the past')
+      setError('Event cannot be scheduled in the past - please choose a future date and time')
       return
     }
 
+    // If we get here, all validations passed
     setIsLoading(true)
 
     try {
@@ -100,7 +104,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      handleSubmit()
+      validateAndCreateEvent()
     }
   }
 
@@ -308,9 +312,13 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
             </div>
 
             {error && (
-              <div className="p-3 bg-red-900/50 border border-red-700 rounded-lg">
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-3 bg-red-900/50 border border-red-700 rounded-lg"
+              >
                 <p className="text-red-300 text-sm">{error}</p>
-              </div>
+              </motion.div>
             )}
 
             <div className="flex gap-3 pt-4">
@@ -323,8 +331,8 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
               </button>
               <button
                 type="button"
-                onClick={handleSubmit}
-                disabled={isLoading || !eventData.title.trim() || !eventData.emoji}
+                onClick={validateAndCreateEvent}
+                disabled={isLoading}
                 className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isLoading ? (
