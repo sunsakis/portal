@@ -6,6 +6,16 @@ import {
   nickname,
   portalMessages,
   waku_SendPortalMessage,
+  // Event imports
+  eventCache,
+  waku_CreateEvent,
+  waku_JoinEvent,
+  waku_LeaveEvent,
+  waku_CancelEvent,
+  getEventsNearLocation,
+  getUpcomingEvents,
+  getEventsByCategory,
+  cleanupExpiredEvents
 } from '../waku/node';
 
 // Define master portal ID locally if not exported
@@ -594,6 +604,8 @@ export const useFriendRequests = (user) => {
             return prev;
           });
         }
+      } else if (friendRequests.length > 0) {
+        setFriendRequests([]);
       }
     };
 
@@ -662,5 +674,306 @@ export const useFriendRequests = (user) => {
     friends,
     acceptFriendRequest,
     declineFriendRequest,
+  };
+};
+
+/**
+ * Enhanced events management hook with Waku integration
+ */
+export const useEvents = (user, userLocation = null) => {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Monitor Waku events
+  useEffect(() => {
+    if (!user) {
+      setEvents([]);
+      return;
+    }
+
+    console.log('Starting Waku event monitoring...');
+
+    const updateEvents = () => {
+      try {
+        // Get all active events from cache
+        const wakuEvents = eventCache.events.filter(event => event.isActive);
+
+        // Sort by start date (upcoming events first)
+        const sortedEvents = wakuEvents.sort((a, b) => 
+          new Date(a.startDateTime).getTime() - new Date(b.startDateTime).getTime()
+        );
+
+        setEvents(sortedEvents);
+        console.log(`📅 Events updated: ${sortedEvents.length} active events`);
+      } catch (err) {
+        console.error('Error processing events:', err);
+        setError('Failed to load events');
+      }
+    };
+
+    // Initial update
+    updateEvents();
+
+    // Poll for updates every 5 seconds
+    const interval = setInterval(updateEvents, 5000);
+
+    // Clean up expired events every 5 minutes
+    const cleanupInterval = setInterval(cleanupExpiredEvents, 5 * 60 * 1000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(cleanupInterval);
+    };
+  }, [user]);
+
+  const createEvent = useCallback(async (eventData) => {
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log('Creating event:', eventData.title);
+      
+      const newEvent = await waku_CreateEvent({
+        title: eventData.title,
+        description: eventData.description || '',
+        category: eventData.category || 'social',
+        latitude: eventData.latitude,
+        longitude: eventData.longitude,
+        startDateTime: eventData.startDateTime,
+        endDateTime: eventData.endDateTime,
+        createdAt: eventData.createdAt || new Date().toISOString(),
+        maxAttendees: eventData.maxAttendees || null,
+      });
+
+      console.log('✅ Event created successfully:', newEvent.title);
+      return { data: newEvent, error: null };
+    } catch (err) {
+      const errorMsg = err.message || 'Failed to create event';
+      console.error('❌ Event creation failed:', errorMsg);
+      setError(errorMsg);
+      return { data: null, error: errorMsg };
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  const joinEvent = useCallback(async (eventId) => {
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log('Joining event:', eventId);
+      
+      const updatedEvent = await waku_JoinEvent(eventId);
+      
+      console.log('✅ Successfully joined event:', updatedEvent.title);
+      return { data: updatedEvent, error: null };
+    } catch (err) {
+      const errorMsg = err.message || 'Failed to join event';
+      console.error('❌ Failed to join event:', errorMsg);
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  const leaveEvent = useCallback(async (eventId) => {
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log('Leaving event:', eventId);
+      
+      const updatedEvent = await waku_LeaveEvent(eventId);
+      
+      console.log('✅ Successfully left event:', updatedEvent.title);
+      return { data: updatedEvent, error: null };
+    } catch (err) {
+      const errorMsg = err.message || 'Failed to leave event';
+      console.error('❌ Failed to leave event:', errorMsg);
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  const cancelEvent = useCallback(async (eventId) => {
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log('Cancelling event:', eventId);
+      
+      const cancelledEvent = await waku_CancelEvent(eventId);
+      
+      console.log('✅ Successfully cancelled event:', cancelledEvent.title);
+      return { data: cancelledEvent, error: null };
+    } catch (err) {
+      const errorMsg = err.message || 'Failed to cancel event';
+      console.error('❌ Failed to cancel event:', errorMsg);
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  // Computed values
+  const nearbyEvents = useCallback((radiusKm = 5) => {
+    if (!userLocation) return [];
+    return getEventsNearLocation(userLocation.latitude, userLocation.longitude, radiusKm);
+  }, [userLocation]);
+
+  const upcomingEvents = useCallback(() => {
+    return getUpcomingEvents();
+  }, []);
+
+  const eventsByCategory = useCallback((category) => {
+    return getEventsByCategory(category);
+  }, []);
+
+  const myEvents = useCallback(() => {
+    if (!user?.wakuIdent?.publicKey) return [];
+    return events.filter(event => event.creatorPubkey === user.wakuIdent.publicKey);
+  }, [events, user]);
+
+  const attendingEvents = useCallback(() => {
+    if (!user?.wakuIdent?.publicKey) return [];
+    return events.filter(event => 
+      event.attendees.includes(user.wakuIdent.publicKey) && 
+      event.creatorPubkey !== user.wakuIdent.publicKey
+    );
+  }, [events, user]);
+
+  // Statistics
+  const eventStats = useCallback(() => {
+    return {
+      total: events.length,
+      upcoming: upcomingEvents().length,
+      nearby: nearbyEvents().length,
+      myEvents: myEvents().length,
+      attending: attendingEvents().length,
+      categories: {
+        social: eventsByCategory('social').length,
+        sports: eventsByCategory('sports').length,
+        food: eventsByCategory('food').length,
+        culture: eventsByCategory('culture').length,
+        business: eventsByCategory('business').length,
+        education: eventsByCategory('education').length,
+        other: eventsByCategory('other').length,
+      }
+    };
+  }, [events, nearbyEvents, upcomingEvents, myEvents, attendingEvents, eventsByCategory]);
+
+  return {
+    events,
+    loading,
+    error,
+    createEvent,
+    joinEvent,
+    leaveEvent,
+    cancelEvent,
+    nearbyEvents,
+    upcomingEvents,
+    eventsByCategory,
+    myEvents,
+    attendingEvents,
+    eventStats,
+    clearError: () => setError(null),
+  };
+};
+
+/**
+ * Hook for managing event filters and search
+ */
+export const useEventFilters = (events) => {
+  const [filters, setFilters] = useState({
+    category: 'all',
+    timeRange: 'all', // 'all', 'today', 'tomorrow', 'this_week'
+    distance: 'all', // 'all', 'nearby', 'very_close'
+    search: '',
+  });
+
+  const filteredEvents = useCallback(() => {
+    let filtered = [...events];
+
+    // Category filter
+    if (filters.category !== 'all') {
+      filtered = filtered.filter(event => event.category === filters.category);
+    }
+
+    // Time range filter
+    if (filters.timeRange !== 'all') {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+      const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+      filtered = filtered.filter(event => {
+        const eventStart = new Date(event.startDateTime);
+        
+        switch (filters.timeRange) {
+          case 'today':
+            return eventStart >= today && eventStart < tomorrow;
+          case 'tomorrow':
+            return eventStart >= tomorrow && eventStart < new Date(tomorrow.getTime() + 24 * 60 * 60 * 1000);
+          case 'this_week':
+            return eventStart >= today && eventStart < nextWeek;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Search filter
+    if (filters.search.trim()) {
+      const searchTerm = filters.search.toLowerCase().trim();
+      filtered = filtered.filter(event =>
+        event.title.toLowerCase().includes(searchTerm) ||
+        event.description.toLowerCase().includes(searchTerm)
+      );
+    }
+
+    return filtered;
+  }, [events, filters]);
+
+  const updateFilter = useCallback((key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setFilters({
+      category: 'all',
+      timeRange: 'all',
+      distance: 'all',
+      search: '',
+    });
+  }, []);
+
+  return {
+    filters,
+    filteredEvents,
+    updateFilter,
+    clearFilters,
+    hasActiveFilters: filters.category !== 'all' || filters.timeRange !== 'all' || filters.distance !== 'all' || filters.search.trim()
   };
 };

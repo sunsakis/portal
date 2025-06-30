@@ -7,13 +7,17 @@ import {
   useGeolocation,
   useLocalAuth,
   useLocalPortals,
-} from '../hooks/supaHooks';
+  useEvents,
+} from '../hooks/hooks';
 import { frenRequests, getWakuStatus } from '../waku/node';
 import ChatPortal from './ChatPortal';
 import { MapControls, MapEventHandler } from './MapControls';
 import MapLayers from './MapLayers';
 import { OtherPortalsMarkers, UserPortalMarker } from './MapMarkers';
+import { EventMarkers } from './EventMarkers';
 import MessageFlowOverlay from './MessageFlowOverlay';
+import EventCreationModal from './EventCreationModal';
+import EventDetailsModal from './EventDetailsModal';
 
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-defaulticon-compatibility';
@@ -45,11 +49,61 @@ const FriendRequestIndicator = ({ friendRequests, onShowRequests }) => {
   );
 };
 
-// Enhanced Error Toast with friend request context
+// Event Stats Indicator
+const EventStatsIndicator = ({ eventStats, onToggleEvents }) => {
+  const [showEvents, setShowEvents] = useState(true);
+
+  const handleToggle = () => {
+    setShowEvents(!showEvents);
+    onToggleEvents(!showEvents);
+  };
+
+  if (eventStats.total === 0) return null;
+
+  return (
+    <motion.button
+      initial={{ scale: 0 }}
+      animate={{ scale: 1 }}
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      onClick={handleToggle}
+      className={`fixed top-16 left-4 z-[1500] ${
+        showEvents ? 'bg-purple-600' : 'bg-gray-600'
+      } text-white rounded-xl shadow-xl px-4 py-2 transition-colors`}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-lg">📅</span>
+        <div className="text-left">
+          <div className="text-sm font-medium">
+            {eventStats.total} Events
+          </div>
+          <div className="text-xs opacity-75">
+            {eventStats.upcoming} upcoming
+          </div>
+        </div>
+        <span className="text-xs opacity-75">
+          {showEvents ? '👁️' : '🙈'}
+        </span>
+      </div>
+    </motion.button>
+  );
+};
+
+// Enhanced Error Toast with event context
 const ErrorToast = ({ error, onDismiss }) => {
   if (!error) return null;
 
   const getErrorConfig = (errorMsg) => {
+    if (errorMsg.includes('event')) {
+      return {
+        icon: '📅',
+        title: 'Event Error',
+        message: errorMsg,
+        color: 'bg-purple-500',
+        suggestion: 'Please check the event details and try again',
+      };
+    }
+
     if (errorMsg.includes('friend request')) {
       return {
         icon: '👋',
@@ -92,7 +146,7 @@ const ErrorToast = ({ error, onDismiss }) => {
 
     return {
       icon: '⚠️',
-      title: 'Portal Creation Failed',
+      title: 'Error',
       message: errorMsg,
       color: 'bg-gray-500',
     };
@@ -135,6 +189,19 @@ export default function Map() {
     useLocalPortals(user);
   const { friendRequests, friends, acceptFriendRequest, declineFriendRequest } =
     useFriendRequests(user);
+  
+  // Events integration
+  const {
+    events,
+    loading: eventsLoading,
+    error: eventsError,
+    createEvent,
+    joinEvent,
+    leaveEvent,
+    cancelEvent,
+    eventStats,
+    clearError: clearEventsError,
+  } = useEvents(user, userLocation);
 
   const [selectedPortal, setSelectedPortal] = useState(null);
   const [showChatPortal, setShowChatPortal] = useState(false);
@@ -142,6 +209,13 @@ export default function Map() {
   const [wakuStatus, setWakuStatus] = useState('connecting');
   const [portalError, setPortalError] = useState(null);
   const [showFriendRequests, setShowFriendRequests] = useState(false);
+  
+  // Event states
+  const [showEventCreation, setShowEventCreation] = useState(false);
+  const [eventCreationLocation, setEventCreationLocation] = useState(null);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [showEventDetails, setShowEventDetails] = useState(false);
+  const [showEventsOnMap, setShowEventsOnMap] = useState(true);
 
   // Default hardcoded location
   const staticLocation = { latitude: 56.96472220, longitude: 24.01670780 };
@@ -167,13 +241,18 @@ export default function Map() {
   // Auto-show friend requests when new ones arrive
   useEffect(() => {
     if (friendRequests.length > 0) {
-      // Show friend requests modal when there are pending requests
       setShowFriendRequests(true);
     } else {
-      // Hide modal when no requests
       setShowFriendRequests(false);
     }
   }, [friendRequests.length]);
+
+  // Handle event and portal errors
+  const currentError = portalError || eventsError;
+  const clearCurrentError = () => {
+    setPortalError(null);
+    clearEventsError();
+  };
 
   // Calculate distance between two coordinates (Haversine formula)
   const calculateDistance = useCallback((lat1, lon1, lat2, lon2) => {
@@ -243,42 +322,40 @@ export default function Map() {
 
   // Auto-dismiss error after 8 seconds
   useEffect(() => {
-    if (portalError) {
+    if (currentError) {
       const timer = setTimeout(() => {
-        setPortalError(null);
+        clearCurrentError();
       }, 8000);
       return () => clearTimeout(timer);
     }
-  }, [portalError]);
+  }, [currentError]);
 
   const handleCreatePortal = async () => {
     if (!user || isPlacingPin) return;
 
     setIsPlacingPin(true);
-    setPortalError(null); // Clear any previous errors
+    setPortalError(null);
 
     try {
       const location = await getCurrentLocation();
-
       const { data, error } = await createPortal(location);
 
       if (error) {
-        setPortalError(error); // Show UX-friendly error
+        setPortalError(error);
       }
     } catch (err) {
       const errorMsg = err.message || err.toString();
-      setPortalError(errorMsg); // Show UX-friendly error
+      setPortalError(errorMsg);
     } finally {
       setIsPlacingPin(false);
     }
   };
 
   const handleClosePortal = async () => {
-    setPortalError(null); // Clear any errors
-
+    setPortalError(null);
     const { error } = await closePortal();
     if (error) {
-      setPortalError(error); // Show UX-friendly error
+      setPortalError(error);
     }
   };
 
@@ -310,13 +387,91 @@ export default function Map() {
     declineFriendRequest(fren);
   };
 
+  // Event handlers
+  const handleLongPress = (latlng, containerPoint) => {
+    console.log('Long press detected at:', latlng);
+    setEventCreationLocation(latlng);
+    setShowEventCreation(true);
+  };
+
+  const handleCreateEvent = async (eventData) => {
+    try {
+      const { data, error } = await createEvent(eventData);
+      if (error) {
+        throw new Error(error);
+      }
+      console.log('Event created successfully:', data);
+      return data;
+    } catch (err) {
+      console.error('Event creation failed:', err);
+      throw err;
+    }
+  };
+
+  const handleEventClick = (event) => {
+    setSelectedEvent(event);
+    setShowEventDetails(true);
+  };
+
+  const handleJoinEvent = async (eventId) => {
+    try {
+      const { data, error } = await joinEvent(eventId);
+      if (error) {
+        throw new Error(error);
+      }
+      // Update the selected event if it's the same one
+      if (selectedEvent && selectedEvent.id === eventId) {
+        setSelectedEvent(data);
+      }
+      return data;
+    } catch (err) {
+      console.error('Failed to join event:', err);
+      throw err;
+    }
+  };
+
+  const handleLeaveEvent = async (eventId) => {
+    try {
+      const { data, error } = await leaveEvent(eventId);
+      if (error) {
+        throw new Error(error);
+      }
+      // Update the selected event if it's the same one
+      if (selectedEvent && selectedEvent.id === eventId) {
+        setSelectedEvent(data);
+      }
+      return data;
+    } catch (err) {
+      console.error('Failed to leave event:', err);
+      throw err;
+    }
+  };
+
+  const handleCancelEvent = async (eventId) => {
+    try {
+      const { data, error } = await cancelEvent(eventId);
+      if (error) {
+        throw new Error(error);
+      }
+      // Close details modal if the cancelled event is currently selected
+      if (selectedEvent && selectedEvent.id === eventId) {
+        setShowEventDetails(false);
+        setSelectedEvent(null);
+      }
+      return data;
+    } catch (err) {
+      console.error('Failed to cancel event:', err);
+      throw err;
+    }
+  };
+
   return (
     <div className='relative h-screen w-full overflow-hidden'>
       {/* Enhanced Error Toast */}
       <AnimatePresence>
         <ErrorToast
-          error={portalError}
-          onDismiss={() => setPortalError(null)}
+          error={currentError}
+          onDismiss={clearCurrentError}
         />
       </AnimatePresence>
 
@@ -326,10 +481,15 @@ export default function Map() {
         onShowRequests={() => setShowFriendRequests(true)}
       />
 
+      {/* Event Stats Indicator */}
+      <EventStatsIndicator
+        eventStats={eventStats()}
+        onToggleEvents={setShowEventsOnMap}
+      />
 
       {/* Loading overlay */}
       <AnimatePresence>
-        {isPlacingPin && (
+        {(isPlacingPin || eventsLoading) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -343,7 +503,9 @@ export default function Map() {
             >
               <div className='animate-spin rounded-full h-6 w-6 border-b-2 border-green-500'>
               </div>
-              <span className='font-medium'>Creating portal...</span>
+              <span className='font-medium'>
+                {isPlacingPin ? 'Creating portal...' : 'Loading events...'}
+              </span>
             </motion.div>
           </motion.div>
         )}
@@ -440,7 +602,7 @@ export default function Map() {
       >
         <MapLayers maptilerApiKey={maptilerApiKey} />
         <MapControls />
-        <MapEventHandler />
+        <MapEventHandler onLongPress={handleLongPress} />
 
         <UserPortalMarker
           portal={userPortal}
@@ -453,9 +615,46 @@ export default function Map() {
           onPortalClick={handlePortalClick}
         />
 
+        {/* Event Markers */}
+        {showEventsOnMap && (
+          <EventMarkers
+            events={events}
+            user={user}
+            onJoin={handleJoinEvent}
+            onLeave={handleLeaveEvent}
+            onCancel={handleCancelEvent}
+            onViewDetails={handleEventClick}
+          />
+        )}
+
         {/* Message Flow Animation Overlay */}
         <MessageFlowOverlay portals={portals} />
       </MapContainer>
+
+      {/* Event Creation Modal */}
+      <EventCreationModal
+        isOpen={showEventCreation}
+        onClose={() => {
+          setShowEventCreation(false);
+          setEventCreationLocation(null);
+        }}
+        onCreateEvent={handleCreateEvent}
+        location={eventCreationLocation}
+      />
+
+      {/* Event Details Modal */}
+      <EventDetailsModal
+        isOpen={showEventDetails}
+        onClose={() => {
+          setShowEventDetails(false);
+          setSelectedEvent(null);
+        }}
+        event={selectedEvent}
+        user={user}
+        onJoin={handleJoinEvent}
+        onLeave={handleLeaveEvent}
+        onCancel={handleCancelEvent}
+      />
 
       {/* Enhanced Chat Portal with Friend Requests */}
       <ChatPortal
@@ -466,47 +665,6 @@ export default function Map() {
         portal={selectedPortal}
         user={user}
       />
-
-      {/* Main Action Button */}
-      {/* <motion.button
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        className={`fixed bottom-6 justify-center portal-button-center ${
-          userPortal
-            ? 'bg-red-500 hover:bg-red-600 opacity-50'
-            : 'bg-green-500 hover:bg-green-600 opacity-50'
-        } text-white px-6 py-4 rounded-full shadow-xl flex items-center gap-3 font-semibold transition-colors z-[1600]`}
-        style={{
-          left: '50%',
-          transform: 'translateX(-50%)',
-          marginBottom: 'max(env(safe-area-inset-bottom, 0px), 20px)',
-        }}
-        onClick={userPortal ? handleClosePortal : handleCreatePortal}
-        disabled={isPlacingPin}
-      >
-        {isPlacingPin
-          ? (
-            <>
-              <div className='animate-spin rounded-full h-5 w-5 border-b-2 border-white'>
-              </div>
-              <span>Opening...</span>
-            </>
-          )
-          : userPortal
-          ? (
-            <>
-              <span>Close Portal</span>
-            </>
-          )
-          : (
-            <>
-              <span className='text-xl'>🌀</span>
-              <span>Open Portal</span>
-            </>
-          )}
-      </motion.button> */}
 
       {/* Enhanced Hybrid Status Indicator */}
       <div className='fixed top-4 right-4 z-[1500]'>
@@ -549,6 +707,7 @@ export default function Map() {
           )}
         </motion.div>
       </div>
+
       {/* Footer Banner */}
       <div className="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm text-white py-2 px-4 z-[1500]">
         <div className="flex items-center justify-center gap-4 text-sm">
@@ -572,6 +731,16 @@ export default function Map() {
           >
             dev@portal.live
           </a>
+
+          {/* Event count indicator */}
+          {events.length > 0 && (
+            <>
+              <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+              <span className="text-purple-400">
+                📅 {events.length} events
+              </span>
+            </>
+          )}
         </div>
       </div>
     </div>

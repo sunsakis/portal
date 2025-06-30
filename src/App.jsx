@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { registerSW } from 'virtual:pwa-register';
 import Map from './components/Map';
-import { useLocalAuth } from './hooks/supaHooks';
+import { useLocalAuth } from './hooks/hooks';
 import './App.css';
 
 function App() {

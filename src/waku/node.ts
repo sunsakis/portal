@@ -19,6 +19,7 @@ let messageStore: MessageStore;
 // Topics for different message types
 export const TOPIC_PORTALS_MESSAGE = '/PORTALS_MESSAGE2/1/message/proto';
 export const TOPIC_FREN_REQUESTS = '/FREN_REQUESTS/1/message/proto';
+export const TOPIC_EVENTS = '/PORTAL_EVENTS/1/message/proto';
 
 export const CLUSTER_ID = 42;
 export const SHARD_ID = 0;
@@ -27,7 +28,7 @@ export let wakuIsReady = false;
 export const idStore = new IdentStore();
 export let nickname = 'W3PN hacker';
 
-// Encoders and decoders
+// Encoders and decoders for portals and friends
 const portal_message_encoder = createEncoder({
   contentTopic: TOPIC_PORTALS_MESSAGE,
   pubsubTopicShardInfo: { clusterId: CLUSTER_ID, shard: SHARD_ID },
@@ -48,6 +49,17 @@ const fren_request_decoder = createDecoder(TOPIC_FREN_REQUESTS, {
   shard: SHARD_ID,
 });
 
+// Event encoder and decoder
+const event_encoder = createEncoder({
+  contentTopic: TOPIC_EVENTS,
+  pubsubTopicShardInfo: { clusterId: CLUSTER_ID, shard: SHARD_ID },
+});
+
+const event_decoder = createDecoder(TOPIC_EVENTS, {
+  clusterId: CLUSTER_ID,
+  shard: SHARD_ID,
+});
+
 // Protobuf message definitions
 export const PortalMessageDataPacket = new protobuf.Type('PortalMessageDataPacket')
   .add(new protobuf.Field('portalId', 1, 'string'))
@@ -58,6 +70,22 @@ export const PortalMessageDataPacket = new protobuf.Type('PortalMessageDataPacke
 
 const FriendRequestDataPacket = new protobuf.Type('FrenDataPacket')
   .add(new protobuf.Field('request', 1, 'string'));
+
+// Event protobuf definition
+export const EventDataPacket = new protobuf.Type('EventDataPacket')
+  .add(new protobuf.Field('id', 1, 'string'))
+  .add(new protobuf.Field('title', 2, 'string'))
+  .add(new protobuf.Field('description', 3, 'string'))
+  .add(new protobuf.Field('category', 4, 'string'))
+  .add(new protobuf.Field('latitude', 5, 'double'))
+  .add(new protobuf.Field('longitude', 6, 'double'))
+  .add(new protobuf.Field('startDateTime', 7, 'string'))
+  .add(new protobuf.Field('endDateTime', 8, 'string'))
+  .add(new protobuf.Field('createdAt', 9, 'string'))
+  .add(new protobuf.Field('creatorPubkey', 10, 'string'))
+  .add(new protobuf.Field('attendees', 11, 'string', 'repeated'))
+  .add(new protobuf.Field('maxAttendees', 12, 'int32'))
+  .add(new protobuf.Field('isActive', 13, 'bool'));
 
 // Type definitions
 export interface PortalMessage {
@@ -81,6 +109,24 @@ export interface FrenRequest {
   request: Hex;
 }
 
+// Event interfaces
+export interface PortalEvent {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  latitude: number;
+  longitude: number;
+  startDateTime: string;
+  endDateTime: string;
+  createdAt: string;
+  creatorPubkey: Hex;
+  attendees: string[];
+  maxAttendees?: number;
+  isActive: boolean;
+  isMyEvent?: boolean;
+}
+
 // Health monitoring
 type HealthChangeCallback = (isReady: boolean) => void;
 const healthListeners: Set<HealthChangeCallback> = new Set();
@@ -97,10 +143,20 @@ export const messageCache: {
   lastUpdated: Date.now(),
 };
 
+// Event storage
+export const eventCache: {
+  events: PortalEvent[];
+  lastUpdated: number;
+} = {
+  events: [],
+  lastUpdated: Date.now(),
+};
+
 // Legacy exports for backwards compatibility
 export const portalList: Portal[] = [];
 export const portalMessages: Record<string, PortalMessage[]> = messageCache.portalMessages;
 export const frenRequests: Fren[] = messageCache.frenRequests;
+export const portalEvents: PortalEvent[] = eventCache.events;
 
 /**
  * Create and initialize Waku node with storage integration
@@ -153,6 +209,7 @@ export const createWakuNode = async () => {
     // Subscribe to real-time messages
     await subscribeToMessages();
     await subscribeToFrenRequests();
+    await subscribeToEvents();
 
     wakuIsReady = true;
     setHealthStatus(true);
@@ -162,7 +219,10 @@ export const createWakuNode = async () => {
       logCacheStats();
     }, 10000);
 
-    console.log('✅ WAKU NODE FULLY INITIALIZED WITH STORAGE');
+    // Cleanup expired events every 30 minutes
+    setInterval(cleanupExpiredEvents, 30 * 60 * 1000);
+
+    console.log('✅ WAKU NODE FULLY INITIALIZED WITH STORAGE AND EVENTS');
 
   } catch (error) {
     console.error('❌ WAKU NODE INITIALIZATION FAILED:', error);
@@ -431,6 +491,319 @@ export const waku_SendFrenMessage = async (
 };
 
 /**
+ * Subscribe to event messages
+ */
+const subscribeToEvents = async () => {
+  const callback = async (wakuMessage: any) => {
+    console.log('📅 New event message received:', wakuMessage);
+    
+    if (!wakuMessage.payload) return;
+
+    try {
+      const eventObj = EventDataPacket.decode(
+        wakuMessage.payload,
+      ) as unknown as PortalEvent;
+
+      await processAndCacheEvent(eventObj);
+      eventCache.lastUpdated = Date.now();
+      
+    } catch (err) {
+      console.error('❌ Error decoding event message:', err);
+    }
+  };
+
+  try {
+    console.log('🔔 Subscribing to events...');
+    await wakuNode.filter.subscribe(event_decoder, callback);
+    console.log('✅ Event subscription successful');
+  } catch (e) {
+    console.error('❌ Event subscription error:', e);
+  }
+};
+
+/**
+ * Process and cache an event
+ */
+const processAndCacheEvent = async (eventObj: PortalEvent) => {
+  try {
+    // Check if this is the user's own event
+    const userPubkey = idStore.getMasterIdent().publicKey;
+    eventObj.isMyEvent = eventObj.creatorPubkey === userPubkey;
+
+    // Check for duplicates before adding
+    const existingIndex = eventCache.events.findIndex(
+      existing => existing.id === eventObj.id
+    );
+    
+    if (existingIndex !== -1) {
+      // Update existing event (for attendee changes, etc.)
+      eventCache.events[existingIndex] = eventObj;
+      console.log(`📅 Event updated: "${eventObj.title}"`);
+    } else {
+      // Only add if event hasn't passed and is active
+      const now = new Date();
+      const eventEnd = new Date(eventObj.endDateTime);
+      
+      if (eventEnd > now && eventObj.isActive) {
+        eventCache.events.push(eventObj);
+        console.log(`📅 Event cached: "${eventObj.title}" at ${eventObj.latitude}, ${eventObj.longitude}`);
+      }
+    }
+    
+    // Sort events by start date
+    eventCache.events.sort((a, b) => 
+      new Date(a.startDateTime).getTime() - new Date(b.startDateTime).getTime()
+    );
+    
+  } catch (err) {
+    console.error('❌ Error processing event:', err);
+  }
+};
+
+/**
+ * Create a new event
+ */
+export const waku_CreateEvent = async (eventData: Omit<PortalEvent, 'id' | 'creatorPubkey' | 'attendees' | 'isActive'>) => {
+  const eventId = `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const creatorPubkey = idStore.getMasterIdent().publicKey;
+
+  const event: PortalEvent = {
+    ...eventData,
+    id: eventId,
+    creatorPubkey: creatorPubkey as Hex,
+    attendees: [creatorPubkey], // Creator is automatically attending
+    isActive: true,
+  };
+
+  try {
+    const protoMessage = EventDataPacket.create(event);
+    const serialisedMessage = EventDataPacket.encode(protoMessage).finish();
+
+    await wakuNode.lightPush.send(event_encoder, {
+      payload: serialisedMessage,
+    });
+
+    // Immediately add to local cache for instant feedback
+    await processAndCacheEvent(event);
+    eventCache.lastUpdated = Date.now();
+
+    console.log('✅ Event created and cached successfully:', event.title);
+    return event;
+  } catch (e) {
+    console.error('❌ Event creation error:', e);
+    throw e;
+  }
+};
+
+/**
+ * Join an event (add user to attendees)
+ */
+export const waku_JoinEvent = async (eventId: string) => {
+  const userPubkey = idStore.getMasterIdent().publicKey;
+  
+  // Find the event in cache
+  const event = eventCache.events.find(e => e.id === eventId);
+  if (!event) {
+    throw new Error('Event not found');
+  }
+  
+  // Check if already attending
+  if (event.attendees.includes(userPubkey)) {
+    throw new Error('Already attending this event');
+  }
+  
+  // Check if event is full
+  if (event.maxAttendees && event.attendees.length >= event.maxAttendees) {
+    throw new Error('Event is full');
+  }
+  
+  // Check if event hasn't started yet
+  const now = new Date();
+  const eventStart = new Date(event.startDateTime);
+  if (eventStart < now) {
+    throw new Error('Event has already started');
+  }
+  
+  // Create updated event with new attendee
+  const updatedEvent: PortalEvent = {
+    ...event,
+    attendees: [...event.attendees, userPubkey],
+  };
+  
+  try {
+    const protoMessage = EventDataPacket.create(updatedEvent);
+    const serialisedMessage = EventDataPacket.encode(protoMessage).finish();
+
+    await wakuNode.lightPush.send(event_encoder, {
+      payload: serialisedMessage,
+    });
+
+    // Update local cache
+    const eventIndex = eventCache.events.findIndex(e => e.id === eventId);
+    if (eventIndex !== -1) {
+      eventCache.events[eventIndex] = updatedEvent;
+    }
+    
+    eventCache.lastUpdated = Date.now();
+    console.log(`✅ Joined event: ${event.title}`);
+    return updatedEvent;
+  } catch (e) {
+    console.error('❌ Error joining event:', e);
+    throw e;
+  }
+};
+
+/**
+ * Leave an event (remove user from attendees)
+ */
+export const waku_LeaveEvent = async (eventId: string) => {
+  const userPubkey = idStore.getMasterIdent().publicKey;
+  
+  const event = eventCache.events.find(e => e.id === eventId);
+  if (!event) {
+    throw new Error('Event not found');
+  }
+  
+  if (!event.attendees.includes(userPubkey)) {
+    throw new Error('Not attending this event');
+  }
+  
+  // Creator cannot leave their own event
+  if (event.creatorPubkey === userPubkey) {
+    throw new Error('Cannot leave your own event. Cancel it instead.');
+  }
+  
+  const updatedEvent: PortalEvent = {
+    ...event,
+    attendees: event.attendees.filter(pubkey => pubkey !== userPubkey),
+  };
+  
+  try {
+    const protoMessage = EventDataPacket.create(updatedEvent);
+    const serialisedMessage = EventDataPacket.encode(protoMessage).finish();
+
+    await wakuNode.lightPush.send(event_encoder, {
+      payload: serialisedMessage,
+    });
+
+    // Update local cache
+    const eventIndex = eventCache.events.findIndex(e => e.id === eventId);
+    if (eventIndex !== -1) {
+      eventCache.events[eventIndex] = updatedEvent;
+    }
+    
+    eventCache.lastUpdated = Date.now();
+    console.log(`✅ Left event: ${event.title}`);
+    return updatedEvent;
+  } catch (e) {
+    console.error('❌ Error leaving event:', e);
+    throw e;
+  }
+};
+
+/**
+ * Cancel an event (only by creator)
+ */
+export const waku_CancelEvent = async (eventId: string) => {
+  const userPubkey = idStore.getMasterIdent().publicKey;
+  
+  const event = eventCache.events.find(e => e.id === eventId);
+  if (!event) {
+    throw new Error('Event not found');
+  }
+  
+  if (event.creatorPubkey !== userPubkey) {
+    throw new Error('Only the event creator can cancel this event');
+  }
+  
+  const updatedEvent: PortalEvent = {
+    ...event,
+    isActive: false,
+  };
+  
+  try {
+    const protoMessage = EventDataPacket.create(updatedEvent);
+    const serialisedMessage = EventDataPacket.encode(protoMessage).finish();
+
+    await wakuNode.lightPush.send(event_encoder, {
+      payload: serialisedMessage,
+    });
+
+    // Remove from local cache since it's cancelled
+    eventCache.events = eventCache.events.filter(e => e.id !== eventId);
+    
+    eventCache.lastUpdated = Date.now();
+    console.log(`✅ Event cancelled: ${event.title}`);
+    return updatedEvent;
+  } catch (e) {
+    console.error('❌ Error cancelling event:', e);
+    throw e;
+  }
+};
+
+/**
+ * Get events near a location
+ */
+export const getEventsNearLocation = (latitude: number, longitude: number, radiusKm: number = 5): PortalEvent[] => {
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  return eventCache.events.filter(event => {
+    const distance = calculateDistance(latitude, longitude, event.latitude, event.longitude);
+    return distance <= radiusKm && event.isActive;
+  });
+};
+
+/**
+ * Get events happening soon (next 24 hours)
+ */
+export const getUpcomingEvents = (): PortalEvent[] => {
+  const now = new Date();
+  const next24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  
+  return eventCache.events.filter(event => {
+    const startTime = new Date(event.startDateTime);
+    return startTime >= now && startTime <= next24Hours && event.isActive;
+  });
+};
+
+/**
+ * Get events by category
+ */
+export const getEventsByCategory = (category: string): PortalEvent[] => {
+  return eventCache.events.filter(event => 
+    event.category === category && event.isActive
+  );
+};
+
+/**
+ * Clean up expired events from cache
+ */
+export const cleanupExpiredEvents = () => {
+  const now = new Date();
+  const initialCount = eventCache.events.length;
+  
+  eventCache.events = eventCache.events.filter(event => {
+    const endTime = new Date(event.endDateTime);
+    return endTime > now && event.isActive;
+  });
+  
+  const removedCount = initialCount - eventCache.events.length;
+  if (removedCount > 0) {
+    console.log(`🧹 Cleaned up ${removedCount} expired events`);
+    eventCache.lastUpdated = Date.now();
+  }
+};
+
+/**
  * Get cache statistics for debugging
  */
 const logCacheStats = () => {
@@ -438,7 +811,7 @@ const logCacheStats = () => {
     return total + messageCache.portalMessages[portalId].length;
   }, 0);
   
-  console.log(`📊 Cache Stats: ${totalMessages} messages across ${Object.keys(messageCache.portalMessages).length} portals, ${messageCache.frenRequests.length} pending friend requests`);
+  console.log(`📊 Cache Stats: ${totalMessages} messages across ${Object.keys(messageCache.portalMessages).length} portals, ${messageCache.frenRequests.length} pending friend requests, ${eventCache.events.length} active events`);
 };
 
 /**
@@ -446,12 +819,15 @@ const logCacheStats = () => {
  */
 export const getCacheState = () => {
   return {
-    ...messageCache,
+    messages: { ...messageCache },
+    events: { ...eventCache },
     stats: {
       totalPortals: Object.keys(messageCache.portalMessages).length,
       totalMessages: Object.values(messageCache.portalMessages).reduce((sum, msgs) => sum + msgs.length, 0),
       pendingFriendRequests: messageCache.frenRequests.length,
-      lastUpdated: new Date(messageCache.lastUpdated).toISOString(),
+      activeEvents: eventCache.events.length,
+      lastMessageUpdate: new Date(messageCache.lastUpdated).toISOString(),
+      lastEventUpdate: new Date(eventCache.lastUpdated).toISOString(),
     }
   };
 };
@@ -463,7 +839,11 @@ export const clearCache = () => {
   messageCache.portalMessages = {};
   messageCache.frenRequests = [];
   messageCache.lastUpdated = Date.now();
-  console.log('🧹 Message cache cleared');
+  
+  eventCache.events = [];
+  eventCache.lastUpdated = Date.now();
+  
+  console.log('🧹 Message and event cache cleared');
 };
 
 /**
