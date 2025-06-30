@@ -20,6 +20,8 @@
   },
   "dependencies": {
     "@browsery/util": "^0.12.6-r2",
+    "@emoji-mart/data": "^1.2.1",
+    "@emoji-mart/react": "^1.1.1",
     "@maptiler/leaflet-maptilersdk": "^2.0.0",
     "@supabase/supabase-js": "^2.45.4",
     "@types/ethereum-blockies": "^0.1.2",

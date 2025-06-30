@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import Picker from '@emoji-mart/react'
+import data from '@emoji-mart/data'
 
 const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
   const [eventData, setEventData] = useState({
     title: '',
+    emoji: '',
     description: '',
     startDate: '',
     startTime: '',
@@ -13,14 +16,16 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
 
-  // Set default dates when modal opens
+  const onEmojiSelect = (emoji) => {
+    setEventData(prev => ({ ...prev, emoji: emoji.native }))
+    setShowEmojiPicker(false)
+  }
+
   useEffect(() => {
     if (isOpen) {
       const now = new Date()
-      const tomorrow = new Date(now)
-      tomorrow.setDate(now.getDate() + 1)
-      
       const formatDate = (date) => date.toISOString().split('T')[0]
       const formatTime = (date) => date.toTimeString().slice(0, 5)
       
@@ -29,18 +34,21 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
         startDate: formatDate(now),
         startTime: formatTime(now),
         endDate: formatDate(now),
-        endTime: formatTime(new Date(now.getTime() + 2 * 60 * 60 * 1000)) // +2 hours
+        endTime: formatTime(new Date(now.getTime() + 2 * 60 * 60 * 1000))
       }))
     }
   }, [isOpen])
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleSubmit = async () => {
     setError(null)
 
-    // Validation
     if (!eventData.title.trim()) {
       setError('Event title is required')
+      return
+    }
+
+    if (!eventData.emoji) {
+      setError('Please select an emoji for your event')
       return
     }
 
@@ -71,9 +79,9 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
 
       await onCreateEvent(eventPayload)
       
-      // Reset form
       setEventData({
         title: '',
+        emoji: '',
         description: '',
         startDate: '',
         startTime: '',
@@ -87,6 +95,12 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
       setError(err.message || 'Failed to create event')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      handleSubmit()
     }
   }
 
@@ -118,11 +132,14 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           className="bg-gray-800 rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border border-gray-700 shadow-2xl"
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={handleKeyPress}
         >
-          {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-xl font-semibold text-gray-100">Create Event</h2>
+              <h2 className="text-xl font-semibold text-gray-100 flex items-center gap-2">
+                Create Event
+                {eventData.emoji && <span className="text-2xl">{eventData.emoji}</span>}
+              </h2>
               <p className="text-sm text-gray-400">
                 Location: {location?.lat.toFixed(4)}, {location?.lng.toFixed(4)}
               </p>
@@ -135,24 +152,75 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Event Title */}
+          <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Event Title *
+                Event Emoji & Title *
               </label>
-              <input
-                type="text"
-                value={eventData.title}
-                onChange={(e) => setEventData(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="What's happening?"
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                maxLength={100}
-                autoFocus
-              />
+              <div className="flex gap-2 relative">
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    className="h-[42px] w-12 bg-gray-700 border border-gray-600 text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors hover:bg-gray-600 flex items-center justify-center"
+                  >
+                    {eventData.emoji ? (
+                      <span className="text-xl">{eventData.emoji}</span>
+                    ) : (
+                      <span className="text-gray-400 text-sm">👽</span>
+                    )}
+                  </button>
+
+                  <AnimatePresence>
+                    {showEmojiPicker && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setShowEmojiPicker(false)}
+                        />
+                        
+                        <motion.div
+                          initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                          transition={{ duration: 0.2 }}
+                          className="absolute top-full left-0 mt-1 z-50"
+                        >
+                          <Picker
+                            data={data}
+                            onEmojiSelect={onEmojiSelect}
+                            theme="dark"
+                            set="native"
+                            showPreview={false}
+                            showSkinTones={true}
+                            emojiSize={24}
+                            perLine={8}
+                            maxFrequentRows={2}
+                            searchPosition="sticky"
+                            navPosition="top"
+                            previewPosition="none"
+                          />
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <input
+                  type="text"
+                  value={eventData.title}
+                  onChange={(e) => setEventData(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="What's happening?"
+                  className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  maxLength={100}
+                  autoFocus
+                />
+              </div>
+              {!eventData.emoji && (
+                <p className="text-xs text-gray-400 mt-1">Click the emoji button to select an emoji</p>
+              )}
             </div>
 
-            {/* Description */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Description
@@ -167,7 +235,6 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
               />
             </div>
 
-            {/* Category */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Category
@@ -190,9 +257,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
               </div>
             </div>
 
-            {/* Date and Time */}
             <div className="grid grid-cols-2 gap-4">
-              {/* Start Date & Time */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Start Date
@@ -217,7 +282,6 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                 />
               </div>
 
-              {/* End Date & Time */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   End Date
@@ -243,14 +307,12 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
               </div>
             </div>
 
-            {/* Error Message */}
             {error && (
               <div className="p-3 bg-red-900/50 border border-red-700 rounded-lg">
                 <p className="text-red-300 text-sm">{error}</p>
               </div>
             )}
 
-            {/* Action Buttons */}
             <div className="flex gap-3 pt-4">
               <button
                 type="button"
@@ -260,8 +322,9 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                 Cancel
               </button>
               <button
-                type="submit"
-                disabled={isLoading || !eventData.title.trim()}
+                type="button"
+                onClick={handleSubmit}
+                disabled={isLoading || !eventData.title.trim() || !eventData.emoji}
                 className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isLoading ? (
@@ -271,13 +334,13 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                   </>
                 ) : (
                   <>
-                    <span className="text-lg">📅</span>
+                    <span className="text-lg">{eventData.emoji || '📅'}</span>
                     <span>Create Event</span>
                   </>
                 )}
               </button>
             </div>
-          </form>
+          </div>
         </motion.div>
       </motion.div>
     </AnimatePresence>
