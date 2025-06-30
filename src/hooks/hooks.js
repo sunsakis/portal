@@ -739,6 +739,7 @@ export const useEvents = (user, userLocation = null) => {
       console.log('Creating event:', eventData.title);
       
       const newEvent = await waku_CreateEvent({
+        emoji: eventData.emoji,
         title: eventData.title,
         description: eventData.description || '',
         category: eventData.category || 'social',

@@ -85,7 +85,8 @@ export const EventDataPacket = new protobuf.Type('EventDataPacket')
   .add(new protobuf.Field('creatorPubkey', 10, 'string'))
   .add(new protobuf.Field('attendees', 11, 'string', 'repeated'))
   .add(new protobuf.Field('maxAttendees', 12, 'int32'))
-  .add(new protobuf.Field('isActive', 13, 'bool'));
+  .add(new protobuf.Field('isActive', 13, 'bool'))
+  .add(new protobuf.Field('emoji', 14, 'string'));
 
 // Type definitions
 export interface PortalMessage {
