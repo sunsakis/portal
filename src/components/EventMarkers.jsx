@@ -61,27 +61,6 @@ export const createEventIcon = (category = 'social', isMyEvent = false, attendee
           ">${emoji}</span>
         </div>
         
-        <!-- Attendee count badge -->
-        ${attendeeCount > 1 ? `
-        <div style="
-          position: absolute;
-          top: -2px;
-          right: -2px;
-          background: #EF4444;
-          color: white;
-          border-radius: 50%;
-          width: 18px;
-          height: 18px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 10px;
-          font-weight: bold;
-          border: 2px solid white;
-          z-index: 3;
-        ">${attendeeCount}</div>
-        ` : ''}
-        
         <!-- Event title label (shows for all events) -->
         <div style="
           position: absolute;
