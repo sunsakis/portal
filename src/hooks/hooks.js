@@ -332,8 +332,8 @@ export const useLocalPortals = (user) => {
       })
       .subscribe();
 
-    // Poll for updates every 10 seconds
-    const interval = setInterval(fetchPortals, 10000);
+    // Poll for updates every 60 seconds
+    const interval = setInterval(fetchPortals, 60000);
 
     return () => {
       clearInterval(interval);
@@ -512,8 +512,8 @@ export const useLocalMessages = (portalId, user) => {
     // Initial update
     updateMessages();
 
-    // Poll for updates every 1 second
-    const interval = setInterval(updateMessages, 1000);
+    // Poll for updates every 10 seconds
+    const interval = setInterval(updateMessages, 10000);
 
     return () => clearInterval(interval);
   }, [portalId, user]);
@@ -609,8 +609,8 @@ export const useFriendRequests = (user) => {
       }
     };
 
-    // Check every 2 seconds for new friend requests (less frequent to reduce load)
-    const interval = setInterval(checkFriendRequests, 2000);
+    // Check every 30 seconds for new friend requests
+    const interval = setInterval(checkFriendRequests, 30000);
 
     return () => clearInterval(interval);
   }, [user, lastProcessedCount]); // Depend on lastProcessedCount instead of processedRequests
@@ -715,8 +715,8 @@ export const useEvents = (user, userLocation = null) => {
     // Initial update
     updateEvents();
 
-    // Poll for updates every 5 seconds
-    const interval = setInterval(updateEvents, 5000);
+    // Poll for updates every 30 seconds
+    const interval = setInterval(updateEvents, 30000);
 
     // Clean up expired events every 5 minutes
     const cleanupInterval = setInterval(cleanupExpiredEvents, 5 * 60 * 1000);
