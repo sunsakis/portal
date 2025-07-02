@@ -5,19 +5,16 @@ import { MapContainer } from 'react-leaflet';
 import {
   useFriendRequests,
   useGeolocation,
-  useLocalAuth,
-  useLocalPortals,
-  useEvents,
+  useP2PAuth,
+  useEvents, // Updated import
 } from '../hooks/hooks';
 import { frenRequests, getWakuStatus } from '../waku/node';
-import ChatPortal from './ChatPortal';
 import { MapControls, MapEventHandler } from './MapControls';
 import MapLayers from './MapLayers';
-import { OtherPortalsMarkers, UserPortalMarker } from './MapMarkers';
 import { EventMarkers } from './EventMarkers';
 import MessageFlowOverlay from './MessageFlowOverlay';
 import EventCreationModal from './EventCreationModal';
-import EventDetailsModal from './EventDetailsModal';
+import EventDetailsModal from './EventDetailsModal'; // Updated modal
 
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-defaulticon-compatibility';
@@ -89,38 +86,18 @@ const EventStatsIndicator = ({ eventStats, onToggleEvents }) => {
   );
 };
 
-// Enhanced Error Toast with event context
+// Enhanced Error Toast
 const ErrorToast = ({ error, onDismiss }) => {
   if (!error) return null;
 
   const getErrorConfig = (errorMsg) => {
-    if (errorMsg.includes('event')) {
-      return {
-        icon: '📅',
-        title: 'Event Error',
-        message: errorMsg,
-        color: 'bg-purple-500',
-        suggestion: 'Please check the event details and try again',
-      };
-    }
-
-    if (errorMsg.includes('friend request')) {
-      return {
-        icon: '👋',
-        title: 'Friend Request Issue',
-        message: errorMsg,
-        color: 'bg-blue-500',
-        suggestion: 'Check your connection and try again',
-      };
-    }
-
     if (errorMsg.includes('only') && errorMsg.includes('away')) {
       return {
         icon: '📍',
-        title: 'Too Close to Another Portal',
+        title: 'Too Close to Another Event',
         message: errorMsg,
         color: 'bg-orange-500',
-        suggestion: 'Try moving at least 10 meters away from other portals',
+        suggestion: 'Try moving at least 10 meters away from other events',
       };
     }
 
@@ -182,29 +159,28 @@ const ErrorToast = ({ error, onDismiss }) => {
 };
 
 export default function Map() {
-  const { user, signInAnonymously } = useLocalAuth();
-  const { error: geoError, getCurrentLocation, location: userLocation } =
-    useGeolocation();
-  const { portals, userPortal, createPortal, closePortal, connectionStatus } =
-    useLocalPortals(user);
-  const { friendRequests, friends, acceptFriendRequest, declineFriendRequest } =
-    useFriendRequests(user);
+  const { user, signInAnonymously } = useP2PAuth();
+  const { error: geoError, getCurrentLocation, location: userLocation } = useGeolocation();
   
-  // Events integration
-  const {
-    events,
+  // Updated to use  events instead of separate portals and events
+  const { 
+    events, 
+    userEvent, 
+    createEvent, 
+    joinEvent, 
+    leaveEvent, 
+    cancelEvent, 
+    connectionStatus,
+    eventStats,
     loading: eventsLoading,
     error: eventsError,
-    createEvent,
-    joinEvent,
-    leaveEvent,
-    cancelEvent,
-    eventStats,
     clearError: clearEventsError,
-  } = useEvents(user, userLocation);
+  } = useEvents(user);
+  
+  const { friendRequests, friends, acceptFriendRequest, declineFriendRequest } = useFriendRequests(user);
 
-  const [selectedPortal, setSelectedPortal] = useState(null);
-  const [showChatPortal, setShowChatPortal] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [showEventDetails, setShowEventDetails] = useState(false);
   const [isPlacingPin, setIsPlacingPin] = useState(false);
   const [wakuStatus, setWakuStatus] = useState('connecting');
   const [portalError, setPortalError] = useState(null);
@@ -213,8 +189,6 @@ export default function Map() {
   // Event states
   const [showEventCreation, setShowEventCreation] = useState(false);
   const [eventCreationLocation, setEventCreationLocation] = useState(null);
-  const [selectedEvent, setSelectedEvent] = useState(null);
-  const [showEventDetails, setShowEventDetails] = useState(false);
   const [showEventsOnMap, setShowEventsOnMap] = useState(true);
 
   // Default hardcoded location
@@ -266,13 +240,13 @@ export default function Map() {
     return R * c; // Distance in kilometers
   }, []);
 
-  // Find the closest portal to user's location or Berlin if no user location
-  const closestPortal = useMemo(() => {
-    if (!portals || portals.length === 0) return null;
+  // Find the closest event to user's location or Berlin if no user location
+  const closestEvent = useMemo(() => {
+    if (!events || events.length === 0) return null;
 
     const referenceLocation = userLocation || staticLocation;
 
-    let closest = portals[0];
+    let closest = events[0];
     let minDistance = calculateDistance(
       referenceLocation.latitude,
       referenceLocation.longitude,
@@ -280,38 +254,38 @@ export default function Map() {
       closest.longitude,
     );
 
-    for (let i = 1; i < portals.length; i++) {
+    for (let i = 1; i < events.length; i++) {
       const distance = calculateDistance(
         referenceLocation.latitude,
         referenceLocation.longitude,
-        portals[i].latitude,
-        portals[i].longitude,
+        events[i].latitude,
+        events[i].longitude,
       );
 
       if (distance < minDistance) {
         minDistance = distance;
-        closest = portals[i];
+        closest = events[i];
       }
     }
 
-    return { portal: closest, distance: minDistance };
-  }, [portals, userLocation, calculateDistance, staticLocation]);
+    return { event: closest, distance: minDistance };
+  }, [events, userLocation, calculateDistance, staticLocation]);
 
-  // Dynamic map center: user location > closest portal > Berlin Prenzlauer Berg
+  // Dynamic map center: user location > closest event > Berlin Prenzlauer Berg
   const mapCenter = useMemo(() => {
     // Priority 1: User's actual location (most private and relevant)
     if (userLocation) {
       return [userLocation.latitude, userLocation.longitude];
     }
 
-    // Priority 2: Closest portal location (shows activity)
-    if (closestPortal?.portal) {
-      return [closestPortal.portal.latitude, closestPortal.portal.longitude];
+    // Priority 2: Closest event location (shows activity)
+    if (closestEvent?.event) {
+      return [closestEvent.event.latitude, closestEvent.event.longitude];
     }
 
     // Priority 3: Berlin Prenzlauer Berg fallback
     return [staticLocation.latitude, staticLocation.longitude];
-  }, [userLocation, closestPortal, staticLocation]);
+  }, [userLocation, closestEvent, staticLocation]);
 
   // Auto sign-in anonymously for privacy
   useEffect(() => {
@@ -330,7 +304,7 @@ export default function Map() {
     }
   }, [currentError]);
 
-  const handleCreatePortal = async () => {
+  const handleCreateEvent = async () => {
     if (!user || isPlacingPin) return;
 
     setIsPlacingPin(true);
@@ -338,7 +312,7 @@ export default function Map() {
 
     try {
       const location = await getCurrentLocation();
-      const { data, error } = await createPortal(location);
+      const { data, error } = await createEvent(location);
 
       if (error) {
         setPortalError(error);
@@ -351,23 +325,23 @@ export default function Map() {
     }
   };
 
-  const handleClosePortal = async () => {
+  const handleCloseEvent = async () => {
     setPortalError(null);
-    const { error } = await closePortal();
+    const { error } = await cancelEvent();
     if (error) {
       setPortalError(error);
     }
   };
 
-  const handlePortalClick = (portal) => {
-    setSelectedPortal(portal);
-    setShowChatPortal(true);
+  const handleEventClick = (event) => {
+    setSelectedEvent(event);
+    setShowEventDetails(true);
 
     // Force focus on mobile to ensure the modal appears
     setTimeout(() => {
-      const chatModal = document.querySelector('[role="dialog"]');
-      if (chatModal) {
-        chatModal.focus();
+      const eventModal = document.querySelector('[role="dialog"]');
+      if (eventModal) {
+        eventModal.focus();
       }
     }, 100);
   };
@@ -387,14 +361,14 @@ export default function Map() {
     declineFriendRequest(fren);
   };
 
-  // Event handlers
+  // Event handlers for long press creation
   const handleLongPress = (latlng, containerPoint) => {
     console.log('Long press detected at:', latlng);
     setEventCreationLocation(latlng);
     setShowEventCreation(true);
   };
 
-  const handleCreateEvent = async (eventData) => {
+  const handleCreateEventFromModal = async (eventData) => {
     try {
       const { data, error } = await createEvent(eventData);
       if (error) {
@@ -406,11 +380,6 @@ export default function Map() {
       console.error('Event creation failed:', err);
       throw err;
     }
-  };
-
-  const handleEventClick = (event) => {
-    setSelectedEvent(event);
-    setShowEventDetails(true);
   };
 
   const handleJoinEvent = async (eventId) => {
@@ -504,7 +473,7 @@ export default function Map() {
               <div className='animate-spin rounded-full h-6 w-6 border-b-2 border-green-500'>
               </div>
               <span className='font-medium'>
-                {isPlacingPin ? 'Creating portal...' : 'Loading events...'}
+                {isPlacingPin ? 'Creating event...' : 'Loading events...'}
               </span>
             </motion.div>
           </motion.div>
@@ -604,21 +573,22 @@ export default function Map() {
         <MapControls />
         <MapEventHandler onLongPress={handleLongPress} />
 
-        <UserPortalMarker
-          portal={userPortal}
-          onPortalClick={handlePortalClick}
-        />
+        {/* User's Event Marker (shows user's own event) */}
+        {userEvent && (
+          <EventMarkers
+            events={[userEvent]}
+            user={user}
+            onJoin={handleJoinEvent}
+            onLeave={handleLeaveEvent}
+            onCancel={handleCancelEvent}
+            onViewDetails={handleEventClick}
+          />
+        )}
 
-        <OtherPortalsMarkers
-          portals={portals}
-          userId={user?.id}
-          onPortalClick={handlePortalClick}
-        />
-
-        {/* Event Markers */}
+        {/* Other Event Markers (all events except user's own) */}
         {showEventsOnMap && (
           <EventMarkers
-            events={events}
+            events={events.filter(event => event.creator_user_id !== user?.id)}
             user={user}
             onJoin={handleJoinEvent}
             onLeave={handleLeaveEvent}
@@ -628,7 +598,7 @@ export default function Map() {
         )}
 
         {/* Message Flow Animation Overlay */}
-        <MessageFlowOverlay portals={portals} />
+        <MessageFlowOverlay portals={events} />
       </MapContainer>
 
       {/* Event Creation Modal */}
@@ -638,11 +608,11 @@ export default function Map() {
           setShowEventCreation(false);
           setEventCreationLocation(null);
         }}
-        onCreateEvent={handleCreateEvent}
+        onCreateEvent={handleCreateEventFromModal}
         location={eventCreationLocation}
       />
 
-      {/* Event Details Modal */}
+      {/*  Event Details Modal with Chat */}
       <EventDetailsModal
         isOpen={showEventDetails}
         onClose={() => {
@@ -654,16 +624,6 @@ export default function Map() {
         onJoin={handleJoinEvent}
         onLeave={handleLeaveEvent}
         onCancel={handleCancelEvent}
-      />
-
-      {/* Enhanced Chat Portal with Friend Requests */}
-      <ChatPortal
-        isOpen={showChatPortal}
-        onClose={() => {
-          setShowChatPortal(false);
-        }}
-        portal={selectedPortal}
-        user={user}
       />
 
       {/* Enhanced Hybrid Status Indicator */}

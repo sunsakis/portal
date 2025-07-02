@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { registerSW } from 'virtual:pwa-register';
 import Map from './components/Map';
-import { useLocalAuth } from './hooks/hooks';
+import { useP2PAuth } from './hooks/hooks';
 import './App.css';
 
 function App() {
-  const { user, loading, error, authenticateWithCode, isAuthenticated } = useLocalAuth();
+  const { user, loading, error, authenticateWithCode, isAuthenticated } = useP2PAuth();
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
 

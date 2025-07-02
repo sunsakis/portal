@@ -1,7 +1,7 @@
 import { useDrag } from '@use-gesture/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import React, { useEffect, useRef, useState } from 'react';
-import { useLocalMessages } from '../hooks/hooks';
+import { useP2PMessages } from '../hooks/hooks';
 import {
   frenRequests,
   getPetName, // Import getPetName function
@@ -455,7 +455,7 @@ const ChatPortal = ({ isOpen, onClose, portal, user }) => {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  const { messages, loading, sendMessage } = useLocalMessages(portal?.id, user);
+  const { messages, loading, sendMessage } = useP2PMessages(portal?.id, user);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
