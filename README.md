@@ -13,5 +13,3 @@ For running the frontend locally, start up a Vite server
 ```bash
 npm run dev
 ```
-
-demo: [https://drive.google.com/file/d/19GVzQL4cwm5fAWaNVpbrvVpjrDeeJNAM/view?usp=sharing](https://drive.google.com/file/d/19GVzQL4cwm5fAWaNVpbrvVpjrDeeJNAM/view?usp=sharing)
