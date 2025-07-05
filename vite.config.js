@@ -11,10 +11,10 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', '*.png'],
       manifest: {
-        name: 'Portal - Location Chat',
+        name: 'Create & Discover Events',
         short_name: 'Portal',
         description:
-          'Share your coordinates once to open a chat portal and connect with people nearby',
+          'Find and host local events, chats.',
         theme_color: '#000000',
         background_color: '#ffffff',
         display: 'standalone',
