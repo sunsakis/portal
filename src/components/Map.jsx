@@ -46,46 +46,6 @@ const FriendRequestIndicator = ({ friendRequests, onShowRequests }) => {
   );
 };
 
-// Event Stats Indicator
-const EventStatsIndicator = ({ eventStats, onToggleEvents }) => {
-  const [showEvents, setShowEvents] = useState(true);
-
-  const handleToggle = () => {
-    setShowEvents(!showEvents);
-    onToggleEvents(!showEvents);
-  };
-
-  if (eventStats.total === 0) return null;
-
-  return (
-    <motion.button
-      initial={{ scale: 0 }}
-      animate={{ scale: 1 }}
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-      onClick={handleToggle}
-      className={`fixed top-16 left-4 z-[1500] ${
-        showEvents ? 'bg-purple-600' : 'bg-gray-600'
-      } text-white rounded-xl shadow-xl px-4 py-2 transition-colors`}
-    >
-      <div className="flex items-center gap-2">
-        <span className="text-lg">📅</span>
-        <div className="text-left">
-          <div className="text-sm font-medium">
-            {eventStats.total} Events
-          </div>
-          <div className="text-xs opacity-75">
-            {eventStats.upcoming} upcoming
-          </div>
-        </div>
-        <span className="text-xs opacity-75">
-          {showEvents ? '👁️' : '🙈'}
-        </span>
-      </div>
-    </motion.button>
-  );
-};
-
 // Enhanced Error Toast
 const ErrorToast = ({ error, onDismiss }) => {
   if (!error) return null;
@@ -448,12 +408,6 @@ export default function Map() {
       <FriendRequestIndicator
         friendRequests={friendRequests}
         onShowRequests={() => setShowFriendRequests(true)}
-      />
-
-      {/* Event Stats Indicator */}
-      <EventStatsIndicator
-        eventStats={eventStats()}
-        onToggleEvents={setShowEventsOnMap}
       />
 
       {/* Loading overlay */}
