@@ -5,8 +5,7 @@ import {
   joinEvent as joinSupabaseEvent,
   leaveEvent as leaveSupabaseEvent,
   cancelEvent as cancelSupabaseEvent,
-  fetchEvents as fetchSupabaseEvents,
-  generateEventId
+  fetchEvents as fetchSupabaseEvents
 } from '../supabase/events';
 import {
   frenRequests,
@@ -23,116 +22,49 @@ const generatePortalId = (latitude, longitude) => {
   return `${x},${y}`;
 };
 
-// Enhanced local user management with Waku identity (unchanged)
-export const useP2PAuth = () => {
+// Simplified crypto-only identity hook
+export const useCryptoIdentity = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const existingUser = localStorage.getItem('portal_user');
-    if (existingUser) {
-      try {
-        const userData = JSON.parse(existingUser);
-        userData.wakuIdent = idStore.getMasterIdent();
-        setUser(userData);
-      } catch (err) {
-        console.error('Invalid user data, creating new user');
-        localStorage.removeItem('portal_user');
-      }
-    }
-
-    if (!existingUser) {
+    try {
+      // Get the Waku cryptographic identity
       const wakuIdent = idStore.getMasterIdent();
-      const newUser = {
-        id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-        email: `anonymous_${Date.now()}@local.app`,
-        created_at: new Date().toISOString(),
-        anonymous: true,
+      
+      // Create user object with crypto identity as the primary ID
+      const cryptoUser = {
+        id: wakuIdent.publicKey,
+        publicKey: wakuIdent.publicKey,
+        address: wakuIdent.account.address,
         wakuIdent: wakuIdent,
         nickname: nickname,
+        created_at: new Date().toISOString(),
+        displayName: nickname || 'Anon',
       };
 
-      localStorage.setItem('portal_user', JSON.stringify({
-        ...newUser,
-        wakuIdent: undefined,
-      }));
-      setUser(newUser);
+      setUser(cryptoUser);
+    } catch (err) {
+      console.error('Failed to initialize crypto identity:', err);
+      // Could fall back to creating a new identity here if needed
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }, []);
 
-  const signInAnonymously = async () => {
-    try {
-      setLoading(true);
-      const wakuIdent = idStore.getMasterIdent();
-      const newUser = {
-        id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-        email: `anonymous_${Date.now()}@local.app`,
-        created_at: new Date().toISOString(),
-        anonymous: true,
-        wakuIdent: wakuIdent,
-        nickname: nickname,
-      };
-
-      localStorage.setItem('portal_user', JSON.stringify({
-        ...newUser,
-        wakuIdent: undefined,
-      }));
-      setUser(newUser);
-      setError(null);
-      setLoading(false);
-      return true;
-    } catch (err) {
-      setError(err.message);
-      setLoading(false);
-      return false;
-    }
-  };
-
-  const authenticateWithCode = async (email, action, code = null) => {
-    if (action === 'send') {
-      console.log(`Mock: Sending code to ${email}`);
-      return true;
-    }
-
-    if (action === 'verify' && code) {
-      console.log(`Mock: Verifying code ${code} for ${email}`);
-      const wakuIdent = idStore.getMasterIdent();
-      const newUser = {
-        id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-        email: email,
-        created_at: new Date().toISOString(),
-        anonymous: false,
-        wakuIdent: wakuIdent,
-        nickname: email.split('@')[0],
-      };
-
-      localStorage.setItem('portal_user', JSON.stringify({
-        ...newUser,
-        wakuIdent: undefined,
-      }));
-      setUser(newUser);
-      return true;
-    }
-
-    return false;
-  };
-
-  const signOut = async () => {
-    localStorage.removeItem('portal_user');
-    localStorage.removeItem('portal_messages');
-    localStorage.removeItem('portal_data');
-    setUser(null);
-  };
+  const signOut = useCallback(() => {
+    // For crypto-only identity, "signing out" means clearing local storage
+    // and forcing page reload to generate new identity
+    localStorage.removeItem('live.portal.portalKey');
+    localStorage.removeItem('portal_friends');
+    localStorage.removeItem('portal_processed_requests');
+    localStorage.removeItem('portal_events_cache');
+    window.location.reload();
+  }, []);
 
   return {
     user,
     loading,
-    error,
-    authenticateWithCode,
-    signInAnonymously,
     signOut,
     isAuthenticated: !!user,
   };
@@ -238,7 +170,7 @@ export const useGeolocation = () => {
 };
 
 /**
- * Events are stored in Supabase but still have chat functionality via Waku
+ * Events stored in Supabase with Waku chat functionality
  */
 export const useEvents = (user) => {
   const [events, setEvents] = useState([]);
@@ -274,13 +206,13 @@ export const useEvents = (user) => {
           ...event,
           // Add portal-compatible fields
           portalId,
-          isMyEvent: event.creator_user_id === user?.id,
+          isMyEvent: event.creator_pubkey === user?.publicKey, // Updated to use publicKey
           // Keep original event fields
           attendees: event.attendees || [],
           attendeeCount: (event.attendees || []).length,
           // Add backward compatibility
           profiles: {
-            username: event.creator_user_id === user?.id ? 'You' : 'Event Creator',
+            username: event.creator_pubkey === user?.publicKey ? 'You' : 'Event Creator',
             avatar_url: null,
           },
         };
@@ -289,7 +221,7 @@ export const useEvents = (user) => {
       setEvents(formattedEvents);
 
       // Find user's event (they can only have one active event at a time)
-      const myEvent = formattedEvents.find(e => e.creator_user_id === user?.id);
+      const myEvent = formattedEvents.find(e => e.creator_pubkey === user?.publicKey);
       setUserEvent(myEvent || null);
 
       setConnectionStatus('connected');
@@ -299,13 +231,13 @@ export const useEvents = (user) => {
       setConnectionStatus('error');
       setError(err.message);
     }
-  }, [user?.id]);
+  }, [user?.publicKey]); // Updated dependency
 
   // Monitor Supabase events
   useEffect(() => {
     if (!user) return;
 
-    console.log('Starting Supabase event monitoring for user:', user.id);
+    console.log('Starting Supabase event monitoring for user:', user.publicKey);
 
     // Initial fetch
     fetchEvents();
@@ -381,7 +313,7 @@ export const useEvents = (user) => {
   };
 
   const joinEvent = async (eventId) => {
-    if (!user?.wakuIdent?.publicKey) {
+    if (!user?.publicKey) { // Updated to use publicKey
       throw new Error('User not authenticated');
     }
 
@@ -391,7 +323,7 @@ export const useEvents = (user) => {
     try {
       console.log('Joining event:', eventId);
       
-      const { data, error: joinError } = await joinSupabaseEvent(eventId, user.wakuIdent.publicKey);
+      const { data, error: joinError } = await joinSupabaseEvent(eventId, user.publicKey);
       
       if (joinError) {
         throw new Error(joinError);
@@ -414,7 +346,7 @@ export const useEvents = (user) => {
   };
 
   const leaveEvent = async (eventId) => {
-    if (!user?.wakuIdent?.publicKey) {
+    if (!user?.publicKey) { // Updated to use publicKey
       throw new Error('User not authenticated');
     }
 
@@ -424,7 +356,7 @@ export const useEvents = (user) => {
     try {
       console.log('Leaving event:', eventId);
       
-      const { data, error: leaveError } = await leaveSupabaseEvent(eventId, user.wakuIdent.publicKey);
+      const { data, error: leaveError } = await leaveSupabaseEvent(eventId, user.publicKey);
       
       if (leaveError) {
         throw new Error(leaveError);
@@ -447,7 +379,7 @@ export const useEvents = (user) => {
   };
 
   const cancelEvent = async (eventId) => {
-    if (!user?.wakuIdent?.publicKey) {
+    if (!user?.publicKey) { // Updated to use publicKey
       throw new Error('User not authenticated');
     }
 
@@ -457,7 +389,7 @@ export const useEvents = (user) => {
     try {
       console.log('Cancelling event:', eventId);
       
-      const { data, error: cancelError } = await cancelSupabaseEvent(eventId, user.wakuIdent.publicKey);
+      const { data, error: cancelError } = await cancelSupabaseEvent(eventId, user.publicKey);
       
       if (cancelError) {
         throw new Error(cancelError);
@@ -520,14 +452,14 @@ export const useEvents = (user) => {
   }, [events]);
 
   const myEvents = useCallback(() => {
-    return events.filter(event => event.creator_user_id === user?.id);
+    return events.filter(event => event.creator_pubkey === user?.publicKey); // Updated to use publicKey
   }, [events, user]);
 
   const attendingEvents = useCallback(() => {
-    if (!user?.wakuIdent?.publicKey) return [];
+    if (!user?.publicKey) return []; // Updated to use publicKey
     return events.filter(event => 
-      event.attendees.includes(user.wakuIdent.publicKey) && 
-      event.creator_user_id !== user.id
+      event.attendees.includes(user.publicKey) && 
+      event.creator_pubkey !== user.publicKey // Updated to use publicKey
     );
   }, [events, user]);
 
@@ -662,7 +594,7 @@ export const useP2PMessages = (portalId, user) => {
   };
 };
 
-// Enhanced friend request management hook (unchanged)
+// Enhanced friend request management hook (updated for crypto-only identity)
 export const useFriendRequests = (user) => {
   const [friendRequests, setFriendRequests] = useState([]);
   const [friends, setFriends] = useState([]);

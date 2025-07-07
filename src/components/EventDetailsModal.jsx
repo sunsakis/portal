@@ -9,7 +9,6 @@ import {
   waku_SendFrenMessage,
 } from '../waku/node'
 
-// Import the existing MessageBubble and UserProfileModal from ChatPortal
 const MessageBubble = ({ msg, user, onUserClick }) => {
   const isOwnMessage = msg.isMyMessage;
 
@@ -144,8 +143,8 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, event }) 
     }
   };
 
-  const isOwnProfile =
-    messageUser.portalPubkey === idStore.getPortalIdent(event?.portalId).publicKey;
+  // Use crypto identity
+  const isOwnProfile = messageUser.portalPubkey === idStore.getPortalIdent(event?.portalId).publicKey;
   const isFriend = messageUser.isFriend;
 
   return (

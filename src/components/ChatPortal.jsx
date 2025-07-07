@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useP2PMessages } from '../hooks/hooks';
 import {
   frenRequests,
-  getPetName, // Import getPetName function
+  getPetName,
   idStore,
   waku_acceptFriendRequest,
   waku_SendFrenMessage,

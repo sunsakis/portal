@@ -5,8 +5,8 @@ import { MapContainer } from 'react-leaflet';
 import {
   useFriendRequests,
   useGeolocation,
-  useP2PAuth,
-  useEvents, // Updated import
+  useCryptoIdentity, // Updated import
+  useEvents,
 } from '../hooks/hooks';
 import { frenRequests, getWakuStatus } from '../waku/node';
 import { MapControls, MapEventHandler } from './MapControls';
@@ -14,7 +14,7 @@ import MapLayers from './MapLayers';
 import { EventMarkers } from './EventMarkers';
 import MessageFlowOverlay from './MessageFlowOverlay';
 import EventCreationModal from './EventCreationModal';
-import EventDetailsModal from './EventDetailsModal'; // Updated modal
+import EventDetailsModal from './EventDetailsModal';
 
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-defaulticon-compatibility';
@@ -119,10 +119,10 @@ const ErrorToast = ({ error, onDismiss }) => {
 };
 
 export default function Map() {
-  const { user, signInAnonymously } = useP2PAuth();
+  const { user } = useCryptoIdentity(); // Updated to use crypto identity only
   const { error: geoError, getCurrentLocation, location: userLocation } = useGeolocation();
   
-  // Updated to use  events instead of separate portals and events
+  // Updated to use events instead of separate portals and events
   const { 
     events, 
     userEvent, 
@@ -246,13 +246,6 @@ export default function Map() {
     // Priority 3: Berlin Prenzlauer Berg fallback
     return [staticLocation.latitude, staticLocation.longitude];
   }, [userLocation, closestEvent, staticLocation]);
-
-  // Auto sign-in anonymously for privacy
-  useEffect(() => {
-    if (!user) {
-      signInAnonymously();
-    }
-  }, [user, signInAnonymously]);
 
   // Auto-dismiss error after 8 seconds
   useEffect(() => {
@@ -527,22 +520,10 @@ export default function Map() {
         <MapControls />
         <MapEventHandler onLongPress={handleLongPress} />
 
-        {/* User's Event Marker (shows user's own event) */}
-        {userEvent && (
-          <EventMarkers
-            events={[userEvent]}
-            user={user}
-            onJoin={handleJoinEvent}
-            onLeave={handleLeaveEvent}
-            onCancel={handleCancelEvent}
-            onViewDetails={handleEventClick}
-          />
-        )}
-
-        {/* Other Event Markers (all events except user's own) */}
+        {/* All Event Markers */}
         {showEventsOnMap && (
           <EventMarkers
-            events={events.filter(event => event.creator_user_id !== user?.id)}
+            events={events} 
             user={user}
             onJoin={handleJoinEvent}
             onLeave={handleLeaveEvent}

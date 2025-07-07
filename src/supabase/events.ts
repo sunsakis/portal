@@ -35,14 +35,14 @@ export const createEvent = async (eventData, user) => {
     const { data, error } = await supabase.rpc('check_event_proximity_and_create', {
       p_latitude: eventData.latitude,
       p_longitude: eventData.longitude,
-      p_user_id: user.id,
+      p_user_id: user.publicKey,
       p_title: eventData.title,
       p_description: eventData.description || '',
       p_emoji: eventData.emoji || '🎉',
       p_category: eventData.category || 'social',
       p_start_datetime: eventData.startDateTime,
       p_end_datetime: eventData.endDateTime,
-      p_creator_pubkey: user.wakuIdent?.publicKey || '',
+      p_creator_pubkey: user.publicKey,
       p_max_attendees: eventData.maxAttendees || null
     });
 
@@ -190,17 +190,17 @@ export const fetchEvents = async () => {
   }
 };
 
-// -- SUPABASE portal schema:
+// Updated Supabase schema comments for crypto identity:
+
+// -- UPDATED SUPABASE SCHEMA FOR CRYPTO IDENTITY ONLY:
 
 // CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-// -- Drop existing portals table and create events table
-// DROP TABLE IF EXISTS portals CASCADE;
-
+// -- Updated events table for crypto-only identity
 // CREATE TABLE events (
 //   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   
-//   -- Location data (from portals)
+//   -- Location data
 //   latitude DECIMAL(10, 8) NOT NULL,
 //   longitude DECIMAL(11, 8) NOT NULL,
   
@@ -215,16 +215,15 @@ export const fetchEvents = async () => {
 //   end_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
 //   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   
-//   -- User data
-//   creator_user_id TEXT NOT NULL,
-//   creator_pubkey TEXT NOT NULL,
-//   attendees TEXT[] DEFAULT ARRAY[]::TEXT[],
+//   -- UPDATED: Crypto identity only - no separate user_id
+//   creator_pubkey TEXT NOT NULL, -- This is the primary user identifier
+//   attendees TEXT[] DEFAULT ARRAY[]::TEXT[], -- Array of public keys
 //   max_attendees INTEGER,
   
 //   -- Status
 //   is_active BOOLEAN DEFAULT true,
   
-//   -- Chat functionality (inherited from portals)
+//   -- Chat functionality
 //   chat_enabled BOOLEAN DEFAULT true,
   
 //   -- Constraints
@@ -236,48 +235,49 @@ export const fetchEvents = async () => {
 //   CONSTRAINT valid_attendee_limit CHECK (max_attendees IS NULL OR max_attendees > 0)
 // );
 
-// -- Simple indexes for performance (without PostGIS)
+// -- Indexes optimized for crypto identity
 // CREATE INDEX idx_events_location_lat ON events (latitude);
 // CREATE INDEX idx_events_location_lng ON events (longitude);
 // CREATE INDEX idx_events_location_combined ON events (latitude, longitude);
-// CREATE INDEX idx_events_creator ON events (creator_user_id);
+// CREATE INDEX idx_events_creator_pubkey ON events (creator_pubkey); -- Updated index name
 // CREATE INDEX idx_events_time ON events (start_datetime, end_datetime);
 // CREATE INDEX idx_events_active ON events (is_active) WHERE is_active = true;
 // CREATE INDEX idx_events_category ON events (category);
+// CREATE INDEX idx_events_attendees ON events USING gin(attendees); -- GIN index for array queries
 
 // -- Enable RLS
 // ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 
-// -- Policies
+// -- Updated policies for crypto identity
 // CREATE POLICY "Anyone can read active events" ON events 
 //   FOR SELECT USING (is_active = true);
 
 // CREATE POLICY "Anyone can create events" ON events 
 //   FOR INSERT WITH CHECK (true);
 
-// CREATE POLICY "Creators can update their events" ON events 
-//   FOR UPDATE USING (creator_user_id = current_setting('request.jwt.claims', true)::json->>'sub');
+// CREATE POLICY "Creators can update their events via pubkey" ON events 
+//   FOR UPDATE USING (creator_pubkey = current_setting('app.current_user_pubkey', true));
 
-// CREATE POLICY "Creators can delete their events" ON events 
-//   FOR DELETE USING (creator_user_id = current_setting('request.jwt.claims', true)::json->>'sub');
+// CREATE POLICY "Creators can delete their events via pubkey" ON events 
+//   FOR DELETE USING (creator_pubkey = current_setting('app.current_user_pubkey', true));
 
 // -- Grant permissions
 // GRANT ALL ON events TO anon, authenticated;
 
-// -- Proximity check function using Haversine formula (no PostGIS required)
+// -- Updated proximity check function for crypto identity
 // CREATE OR REPLACE FUNCTION check_event_proximity_and_create(
 //   p_latitude DECIMAL(10, 8),
 //   p_longitude DECIMAL(11, 8),
-//   p_user_id TEXT,
+//   p_user_id TEXT, -- Now the public key
 //   p_title TEXT,
 //   p_description TEXT DEFAULT NULL,
 //   p_emoji TEXT DEFAULT '🎉',
 //   p_category TEXT DEFAULT 'social',
 //   p_start_datetime TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 //   p_end_datetime TIMESTAMP WITH TIME ZONE DEFAULT NOW() + INTERVAL '2 hours',
-//   p_creator_pubkey TEXT DEFAULT '',
+//   p_creator_pubkey TEXT DEFAULT '', -- Same as p_user_id now
 //   p_max_attendees INTEGER DEFAULT NULL
-// ) RETURNS JSON AS $$
+// ) RETURNS JSON AS $
 // DECLARE
 //   nearest_distance DECIMAL;
 //   new_event_id UUID;
@@ -334,15 +334,15 @@ export const fetchEvents = async () => {
 //     RETURN result;
 //   END IF;
 
-//   -- Create the event
+//   -- Create the event with crypto identity only
 //   INSERT INTO events (
-//     latitude, longitude, creator_user_id, title, description, emoji, 
-//     category, start_datetime, end_datetime, creator_pubkey, max_attendees,
+//     latitude, longitude, creator_pubkey, title, description, emoji, 
+//     category, start_datetime, end_datetime, max_attendees,
 //     attendees
 //   ) VALUES (
-//     p_latitude, p_longitude, p_user_id, p_title, p_description, p_emoji,
-//     p_category, p_start_datetime, p_end_datetime, p_creator_pubkey, p_max_attendees,
-//     ARRAY[p_creator_pubkey]
+//     p_latitude, p_longitude, p_creator_pubkey, p_title, p_description, p_emoji,
+//     p_category, p_start_datetime, p_end_datetime, p_max_attendees,
+//     ARRAY[p_creator_pubkey] -- Creator automatically attends their own event
 //   ) RETURNING id INTO new_event_id;
 
 //   -- Return success
@@ -356,10 +356,11 @@ export const fetchEvents = async () => {
 //       'latitude', p_latitude,
 //       'longitude', p_longitude,
 //       'title', p_title,
+//       'creator_pubkey', p_creator_pubkey,
 //       'created_at', NOW()
 //     )
 //   );
   
 //   RETURN result;
 // END;
-// $$ LANGUAGE plpgsql SECURITY DEFINER;
+// $ LANGUAGE plpgsql SECURITY DEFINER;
