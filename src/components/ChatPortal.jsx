@@ -15,7 +15,7 @@ const MessageBubble = ({ msg, user, onUserClick }) => {
   const isOwnMessage = msg.isMyMessage;
 
   const formatTime = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString('en-US', {
+    return new Date(timestamp).toLocaleTimeString('en-GB', {
       hour: '2-digit',
       minute: '2-digit',
     });

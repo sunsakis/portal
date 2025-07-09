@@ -10,9 +10,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
     description: '',
     startDate: '',
     startTime: '',
-    endDate: '',
-    endTime: '',
-    category: 'social'
+    duration: ''
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -24,99 +22,113 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
   }
 
   useEffect(() => {
-    if (isOpen) {
-      const now = new Date()
-      const formatDate = (date) => date.toISOString().split('T')[0]
-      const formatTime = (date) => date.toTimeString().slice(0, 5)
-      
-      setEventData(prev => ({
-        ...prev,
-        startDate: formatDate(now),
-        startTime: formatTime(now),
-        endDate: formatDate(now),
-        endTime: formatTime(new Date(now.getTime() + 2 * 60 * 60 * 1000))
-      }))
-    }
-  }, [isOpen])
+  if (isOpen) {
+    const now = new Date()
+    const formatDate = (date) => date.toISOString().split('T')[0]
+    const formatTime = (date) => date.toTimeString().slice(0, 5)
+    
+    setEventData(prev => ({
+      ...prev,
+      startDate: formatDate(now),
+      startTime: formatTime(now),
+      duration: ''
+    }))
+  }
+}, [isOpen])
 
   const validateAndCreateEvent = async () => {
-    setError(null)
+  setError(null)
+
+  // Check for missing title
+  if (!eventData.title.trim()) {
+    setError('Please enter a title for your event')
+    setTimeout(() => setError(null), 5000)
+    return
+  }
+
+  // Check for missing emoji
+  if (!eventData.emoji) {
+    setError('Please select an emoji for your event - click the emoji button to choose one')
+    setTimeout(() => setError(null), 5000)
+    return
+  }
+
+  // Check for missing start date/time
+  if (!eventData.startDate || !eventData.startTime) {
+    setError('Please select a start date and time for your event')
+    setTimeout(() => setError(null), 5000)
+    return
+  }
+
+  // Check for missing duration
+  if (!eventData.duration) {
+    setError('Please select a duration for your event')
+    setTimeout(() => setError(null), 5000)
+    return
+  }
+
+  // Calculate start and end times
+  const startDateTime = new Date(`${eventData.startDate}T${eventData.startTime}`)
+  const endDateTime = new Date(startDateTime.getTime() + (eventData.duration * 60 * 60 * 1000))
+
+  // Check if event is in the past
+  if (startDateTime < new Date()) {
+    setError('Event cannot be scheduled in the past - please choose a future date and time')
+    setTimeout(() => setError(null), 5000)
+    return
+  }
+
+  // Duration validation (should always pass since slider limits to 6 hours, but good to have)
+  if (eventData.duration > 6) {
+    setError('Event duration cannot exceed 6 hours')
+    setTimeout(() => setError(null), 5000)
+    return
+  }
 
     // Check for missing title
-    if (!eventData.title.trim()) {
-      setError('Please enter a title for your event')
-      return
-    }
-
-    // Check for missing emoji
-    if (!eventData.emoji) {
-      setError('Please select an emoji for your event - click the emoji button to choose one')
-      return
-    }
-
-    // Check date/time validity
-    const startDateTime = new Date(`${eventData.startDate}T${eventData.startTime}`)
-    const endDateTime = new Date(`${eventData.endDate}T${eventData.endTime}`)
-
-    if (startDateTime >= endDateTime) {
-      setError('The end time must be after the start time')
-      return
-    }
-
-    if (startDateTime < new Date()) {
-      setError('Event cannot be scheduled in the past - please choose a future date and time')
-      return
-    }
-
-    // If we get here, all validations passed
-    setIsLoading(true)
-
-    try {
-      const eventPayload = {
-        ...eventData,
-        latitude: location.lat,
-        longitude: location.lng,
-        startDateTime: startDateTime.toISOString(),
-        endDateTime: endDateTime.toISOString(),
-        createdAt: new Date().toISOString()
-      }
-
-      await onCreateEvent(eventPayload)
-      
-      setEventData({
-        title: '',
-        emoji: '',
-        description: '',
-        startDate: '',
-        startTime: '',
-        endDate: '',
-        endTime: '',
-        category: 'social'
-      })
-      
-      onClose()
-    } catch (err) {
-      setError(err.message || 'Failed to create event')
-    } finally {
-      setIsLoading(false)
-    }
+  if (!eventData.description.trim()) {
+    setError('Please enter the description for your event')
+    setTimeout(() => setError(null), 5000)
+    return
   }
+
+  // If we get here, all validations passed
+  setIsLoading(true)
+
+  try {
+    const eventPayload = {
+      ...eventData,
+      latitude: location.lat,
+      longitude: location.lng,
+      startDateTime: startDateTime.toISOString(),
+      endDateTime: endDateTime.toISOString(),
+      createdAt: new Date().toISOString()
+    }
+
+    await onCreateEvent(eventPayload)
+    
+    setEventData({
+      title: '',
+      emoji: '',
+      description: '',
+      startDate: '',
+      startTime: '',
+      duration: 2 // Reset to default 2 hours
+    })
+    
+    onClose()
+  } catch (err) {
+    setError(err.message || 'Failed to create event')
+  } finally {
+    setIsLoading(false)
+  }
+}
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       validateAndCreateEvent()
     }
   }
-
-  const categories = [
-    { value: 'social', label: '🎉 Social', color: 'bg-blue-500' },
-    { value: 'sports', label: '⚽ Sports', color: 'bg-green-500' },
-    { value: 'food', label: '🍕 Food & Drink', color: 'bg-orange-500' },
-    { value: 'culture', label: '🎭 Culture', color: 'bg-purple-500' },
-    { value: 'business', label: '💼 Business', color: 'bg-gray-500' },
-    { value: 'education', label: '📚 Education', color: 'bg-indigo-500' },
-    { value: 'other', label: '✨ Other', color: 'bg-pink-500' }
-  ]
 
   if (!isOpen) return null
 
@@ -232,83 +244,124 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
               <textarea
                 value={eventData.description}
                 onChange={(e) => setEventData(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Tell people more about your event..."
+                placeholder="Tell people about your event..."
                 rows={3}
                 className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                 maxLength={500}
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Category
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {categories.map((category) => (
-                  <button
-                    key={category.value}
-                    type="button"
-                    onClick={() => setEventData(prev => ({ ...prev, category: category.value }))}
-                    className={`p-2 rounded-lg text-sm font-medium transition-all border ${
-                      eventData.category === category.value
-                        ? `${category.color} text-white border-transparent`
-                        : 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600'
-                    }`}
-                  >
-                    {category.label}
-                  </button>
-                ))}
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Start Date
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      value={eventData.startDate}
+                      onChange={(e) => setEventData(prev => ({ ...prev, startDate: e.target.value }))}
+                      className="w-full px-3 py-2 pr-10 bg-gray-700 border border-gray-600 text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer hover:bg-gray-600 transition-colors [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:left-0 [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                    />
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400">
+                      📅
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Start Time
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="time"
+                      value={eventData.startTime}
+                      onChange={(e) => setEventData(prev => ({ ...prev, startTime: e.target.value }))}
+                      className="w-full px-3 py-2 pr-10 bg-gray-700 border border-gray-600 text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer hover:bg-gray-600 transition-colors [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:left-0 [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                    />
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400">
+                      🕐
+                    </div>
+                  </div>
+                </div>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-3">
+                  Event Duration: {eventData.duration || 2} hour{(eventData.duration || 2) === 1 ? '' : 's'}
+                </label>
+                <div className="relative">
+                  <input
+                    type="range"
+                    min="1"
+                    max="6"
+                    step="0.5"
+                    value={eventData.duration || 2}
+                    onChange={(e) => setEventData(prev => ({ ...prev, duration: parseFloat(e.target.value) }))}
+                    className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer 
+                              [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 
+                              [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gradient-to-br [&::-webkit-slider-thumb]:from-blue-500 [&::-webkit-slider-thumb]:to-purple-600 
+                              [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-gray-800 
+                              [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110
+                              [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full 
+                              [&::-moz-range-thumb]:bg-gradient-to-br [&::-moz-range-thumb]:from-blue-500 [&::-moz-range-thumb]:to-purple-600 
+                              [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-gray-800 
+                              [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:transition-transform [&::-moz-range-thumb]:hover:scale-110
+                              [&::-moz-range-thumb]:border-none"
+                    style={{
+                      background: `linear-gradient(to right, 
+                        #3b82f6 0%, 
+                        #3b82f6 ${((eventData.duration || 2) - 1) / 5 * 100}%, 
+                        #4b5563 ${((eventData.duration || 2) - 1) / 5 * 100}%, 
+                        #4b5563 100%)`
+                    }}
+                  />
+                  <div className="flex justify-between text-xs text-gray-400 mt-2">
+                    <span>1h</span>
+                    <span>2h</span>
+                    <span>3h</span>
+                    <span>4h</span>
+                    <span>5h</span>
+                    <span>6h</span>
+                  </div>
+                  
+                  {/* Fun emoji indicators */}
+                  <div className="flex justify-between absolute -top-8 w-full text-lg pointer-events-none">
+                    <span className={`transition-all duration-200 ${(eventData.duration || 2) >= 1 ? 'opacity-0 scale-0' : 'opacity-0'}`}>⚡</span>
+                    <span className={`transition-all duration-200 ${(eventData.duration || 2) >= 2 ? 'opacity-0 scale-0' : 'opacity-0'}`}>☕</span>
+                    <span className={`transition-all duration-200 ${(eventData.duration || 2) >= 3 ? 'opacity-0 scale-0' : 'opacity-0'}`}>🍕</span>
+                    <span className={`transition-all duration-200 ${(eventData.duration || 2) >= 4 ? 'opacity-0 scale-0' : 'opacity-0'}`}>🎬</span>
+                    <span className={`transition-all duration-200 ${(eventData.duration || 2) >= 5 ? 'opacity-0 scale-0' : 'opacity-0'}`}>🎉</span>
+                    <span className={`transition-all duration-200 ${(eventData.duration || 2) >= 6 ? 'opacity-100 scale-110' : 'opacity-50'}`}>⚡</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* End time display */}
+              {eventData.startDate && eventData.startTime && eventData.duration && (
+                <div className="text-sm text-gray-400 bg-gray-700/50 p-3 rounded-lg">
+                  <span className="font-medium">Event ends at:</span> {
+                    (() => {
+                      const start = new Date(`${eventData.startDate}T${eventData.startTime}`)
+                      const end = new Date(start.getTime() + (eventData.duration * 60 * 60 * 1000))
+                      return end.toLocaleString('en-US', {
+                        weekday: 'short',
+                        month: 'short', 
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })
+                    })()
+                  }
+                </div>
+              )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  value={eventData.startDate}
-                  onChange={(e) => setEventData(prev => ({ ...prev, startDate: e.target.value }))}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Start Time
-                </label>
-                <input
-                  type="time"
-                  value={eventData.startTime}
-                  onChange={(e) => setEventData(prev => ({ ...prev, startTime: e.target.value }))}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  End Date
-                </label>
-                <input
-                  type="date"
-                  value={eventData.endDate}
-                  onChange={(e) => setEventData(prev => ({ ...prev, endDate: e.target.value }))}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  End Time
-                </label>
-                <input
-                  type="time"
-                  value={eventData.endTime}
-                  onChange={(e) => setEventData(prev => ({ ...prev, endTime: e.target.value }))}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+            {/* Duration info */}
+            <div className="text-xs text-gray-400 bg-gray-700/50 p-2 rounded-lg">
+              <span className="font-medium">Maximum duration is</span> 6 hours to keep the fun concentrado
             </div>
 
             {error && (

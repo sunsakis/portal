@@ -39,7 +39,6 @@ export const createEvent = async (eventData, user) => {
       p_title: eventData.title,
       p_description: eventData.description || '',
       p_emoji: eventData.emoji || '🎉',
-      p_category: eventData.category || 'social',
       p_start_datetime: eventData.startDateTime,
       p_end_datetime: eventData.endDateTime,
       p_creator_pubkey: user.publicKey,
@@ -125,7 +124,7 @@ export const leaveEvent = async (eventId, userPubkey) => {
 
     // Prevent creator from leaving
     if (event.creator_pubkey === userPubkey) {
-      throw new Error('Cannot leave your own event. Cancel it instead.');
+      throw new Error('Cannot leave your own event.');
     }
 
     // Remove user from attendees
@@ -207,8 +206,7 @@ export const fetchEvents = async () => {
 //   -- Event data
 //   title TEXT NOT NULL,
 //   description TEXT,
-//   emoji TEXT NOT NULL DEFAULT '👽',
-//   category TEXT NOT NULL DEFAULT 'social',
+//   emoji TEXT NOT NULL DEFAULT '👽'
   
 //   -- Time data
 //   start_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -242,7 +240,6 @@ export const fetchEvents = async () => {
 // CREATE INDEX idx_events_creator_pubkey ON events (creator_pubkey); -- Updated index name
 // CREATE INDEX idx_events_time ON events (start_datetime, end_datetime);
 // CREATE INDEX idx_events_active ON events (is_active) WHERE is_active = true;
-// CREATE INDEX idx_events_category ON events (category);
 // CREATE INDEX idx_events_attendees ON events USING gin(attendees); -- GIN index for array queries
 
 // -- Enable RLS
@@ -272,7 +269,6 @@ export const fetchEvents = async () => {
 //   p_title TEXT,
 //   p_description TEXT DEFAULT NULL,
 //   p_emoji TEXT DEFAULT '🎉',
-//   p_category TEXT DEFAULT 'social',
 //   p_start_datetime TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 //   p_end_datetime TIMESTAMP WITH TIME ZONE DEFAULT NOW() + INTERVAL '2 hours',
 //   p_creator_pubkey TEXT DEFAULT '', -- Same as p_user_id now
@@ -337,11 +333,11 @@ export const fetchEvents = async () => {
 //   -- Create the event with crypto identity only
 //   INSERT INTO events (
 //     latitude, longitude, creator_pubkey, title, description, emoji, 
-//     category, start_datetime, end_datetime, max_attendees,
+//     start_datetime, end_datetime, max_attendees,
 //     attendees
 //   ) VALUES (
 //     p_latitude, p_longitude, p_creator_pubkey, p_title, p_description, p_emoji,
-//     p_category, p_start_datetime, p_end_datetime, p_max_attendees,
+//     p_start_datetime, p_end_datetime, p_max_attendees,
 //     ARRAY[p_creator_pubkey] -- Creator automatically attends their own event
 //   ) RETURNING id INTO new_event_id;
 

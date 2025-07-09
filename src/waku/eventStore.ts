@@ -123,19 +123,6 @@ export class EventStore {
   }
 
   /**
-   * Query events by category
-   */
-  public async queryEventsByCategory(category: string): Promise<PortalEvent[]> {
-    try {
-        const allEvents = await this.queryStore();
-        return allEvents.filter(event => event.category === category);
-    } catch (error) {
-        console.error(`❌ Error querying events for category ${category}:`, error);
-        return [];
-    }
-  }
-
-  /**
    * Query upcoming events (next N hours)
    */
   public async queryUpcomingEvents(hoursAhead: number = 24): Promise<PortalEvent[]> {
@@ -219,7 +206,6 @@ export class EventStore {
     totalEvents: number;
     activeEvents: number;
     upcomingEvents: number;
-    categoryCounts: Record<string, number>;
     oldestEvent?: Date;
     newestEvent?: Date;
     averageAttendeesPerEvent: number;
@@ -232,7 +218,6 @@ export class EventStore {
                 totalEvents: 0,
                 activeEvents: 0,
                 upcomingEvents: 0,
-                categoryCounts: {},
                 averageAttendeesPerEvent: 0,
             };
         }
@@ -241,11 +226,9 @@ export class EventStore {
         const activeEvents = events.filter(e => e.isActive).length;
         const upcomingEvents = events.filter(e => new Date(e.startDateTime) > now).length;
         
-        const categoryCounts: Record<string, number> = {};
         let totalAttendees = 0;
         
         events.forEach(event => {
-            categoryCounts[event.category] = (categoryCounts[event.category] || 0) + 1;
             totalAttendees += event.attendees.length;
         });
 
@@ -257,7 +240,6 @@ export class EventStore {
             totalEvents: events.length,
             activeEvents,
             upcomingEvents,
-            categoryCounts,
             oldestEvent: timestamps.length > 0 ? new Date(Math.min(...timestamps)) : undefined,
             newestEvent: timestamps.length > 0 ? new Date(Math.max(...timestamps)) : undefined,
             averageAttendeesPerEvent: events.length > 0 ? Math.round(totalAttendees / events.length * 100) / 100 : 0,
@@ -268,7 +250,6 @@ export class EventStore {
             totalEvents: 0,
             activeEvents: 0,
             upcomingEvents: 0,
-            categoryCounts: {},
             averageAttendeesPerEvent: 0,
         };
     }

@@ -13,7 +13,7 @@ const MessageBubble = ({ msg, user, onUserClick }) => {
   const isOwnMessage = msg.isMyMessage;
 
   const formatTime = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString('en-US', {
+    return new Date(timestamp).toLocaleTimeString('en-GB', {
       hour: '2-digit',
       minute: '2-digit',
     });
@@ -299,13 +299,13 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
   const formatDateTime = (dateTimeString) => {
     const date = new Date(dateTimeString)
     return {
-      date: date.toLocaleDateString('en-US', { 
+      date: date.toLocaleDateString('en-GB', { 
         weekday: 'long', 
         year: 'numeric',
         month: 'long', 
         day: 'numeric' 
       }),
-      time: date.toLocaleTimeString('en-US', { 
+      time: date.toLocaleTimeString('en-GB', { 
         hour: '2-digit', 
         minute: '2-digit' 
       })
@@ -320,30 +320,6 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
   const hasStarted = eventStart <= now
   const hasEnded = eventEnd <= now
 
-  const categoryInfo = {
-    social: { icon: '🎉', label: 'Social', color: 'bg-blue-500' },
-    sports: { icon: '⚽', label: 'Sports', color: 'bg-green-500' },
-    food: { icon: '🍕', label: 'Food & Drink', color: 'bg-orange-500' },
-    culture: { icon: '🎭', label: 'Culture', color: 'bg-purple-500' },
-    business: { icon: '💼', label: 'Business', color: 'bg-gray-500' },
-    education: { icon: '📚', label: 'Education', color: 'bg-indigo-500' },
-    other: { icon: '✨', label: 'Other', color: 'bg-pink-500' }
-  }
-
-  const category = categoryInfo[event.category] || categoryInfo.other
-
-  const getEventStatus = () => {
-    if (hasEnded) {
-      return { label: 'Event Ended', icon: '⚫', color: 'text-gray-500' }
-    } else if (hasStarted) {
-      return { label: 'In Progress', icon: '🟢', color: 'text-green-600' }
-    } else {
-      return { label: 'Upcoming', icon: '🔵', color: 'text-blue-600' }
-    }
-  }
-
-  const status = getEventStatus()
-
   const handleJoin = async () => {
     setIsLoading(true)
     setError(null)
@@ -351,6 +327,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
       await onJoin(event.id)
     } catch (err) {
       setError(err.message)
+      setTimeout(() => setError(null), 5000)
     } finally {
       setIsLoading(false)
     }
@@ -363,6 +340,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
       await onLeave(event.id)
     } catch (err) {
       setError(err.message)
+      setTimeout(() => setError(null), 5000)
     } finally {
       setIsLoading(false)
     }
@@ -377,6 +355,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
         onClose()
       } catch (err) {
         setError(err.message)
+        setTimeout(() => setError(null), 5000)
       } finally {
         setIsLoading(false)
       }
@@ -437,19 +416,9 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
           <div className="p-6 border-b border-gray-700 flex-shrink-0">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="text-3xl">{event.emoji || category.icon}</div>
+                <div className="text-3xl">{event.emoji}</div>
                 <div>
                   <h2 className="text-xl font-semibold text-gray-100">{event.title}</h2>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className={`inline-flex items-center gap-1 px-2 py-1 ${category.color} text-white text-xs rounded-full font-medium`}>
-                      {category.label}
-                    </span>
-                    {isMyEvent && (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-500 text-white text-xs rounded-full font-medium">
-                        Your Event
-                      </span>
-                    )}
-                  </div>
                 </div>
               </div>
               <button
@@ -530,12 +499,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
                     </div>
                     <div className="flex items-center gap-2 text-gray-100">
                       <span>🕐</span>
-                      <span>{startTime.time} - {endTime.time}</span>
-                      {startTime.date !== endTime.date && (
-                        <span className="text-gray-400 text-xs">
-                          (ends {endTime.date})
-                        </span>
-                      )}
+                      <span>From {startTime.time} to {endTime.time}</span>
                     </div>
                   </div>
                 </div>
@@ -565,20 +529,6 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
                     </div>
                   </div>
                 )}
-
-                {/* Created */}
-                <div>
-                  <h4 className="text-sm font-medium text-gray-300 mb-2">Created</h4>
-                  <div className="text-gray-100 text-sm">
-                    {new Date(event.created_at).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </div>
-                </div>
               </div>
             )}
 

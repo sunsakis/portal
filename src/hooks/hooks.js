@@ -447,10 +447,6 @@ export const useEvents = (user) => {
     });
   }, [events]);
 
-  const eventsByCategory = useCallback((category) => {
-    return events.filter(event => event.category === category);
-  }, [events]);
-
   const myEvents = useCallback(() => {
     return events.filter(event => event.creator_pubkey === user?.publicKey); // Updated to use publicKey
   }, [events, user]);
@@ -469,18 +465,9 @@ export const useEvents = (user) => {
       total: events.length,
       upcoming: upcomingEvents().length,
       myEvents: myEvents().length,
-      attending: attendingEvents().length,
-      categories: {
-        social: eventsByCategory('social').length,
-        sports: eventsByCategory('sports').length,
-        food: eventsByCategory('food').length,
-        culture: eventsByCategory('culture').length,
-        business: eventsByCategory('business').length,
-        education: eventsByCategory('education').length,
-        other: eventsByCategory('other').length,
-      }
+      attending: attendingEvents().length
     };
-  }, [events, upcomingEvents, myEvents, attendingEvents, eventsByCategory]);
+  }, [events, upcomingEvents, myEvents, attendingEvents]);
 
   return {
     // Event-related exports
@@ -493,7 +480,6 @@ export const useEvents = (user) => {
     cancelEvent,
     nearbyEvents,
     upcomingEvents,
-    eventsByCategory,
     myEvents,
     attendingEvents,
     eventStats,
@@ -727,7 +713,6 @@ export const useFriendRequests = (user) => {
 // Hook for managing event filters and search (unchanged)
 export const useEventFilters = (events) => {
   const [filters, setFilters] = useState({
-    category: 'all',
     timeRange: 'all',
     distance: 'all',
     search: '',
@@ -735,11 +720,6 @@ export const useEventFilters = (events) => {
 
   const filteredEvents = useCallback(() => {
     let filtered = [...events];
-
-    // Category filter
-    if (filters.category !== 'all') {
-      filtered = filtered.filter(event => event.category === filters.category);
-    }
 
     // Time range filter
     if (filters.timeRange !== 'all') {
@@ -782,7 +762,6 @@ export const useEventFilters = (events) => {
 
   const clearFilters = useCallback(() => {
     setFilters({
-      category: 'all',
       timeRange: 'all',
       distance: 'all',
       search: '',
@@ -794,6 +773,6 @@ export const useEventFilters = (events) => {
     filteredEvents,
     updateFilter,
     clearFilters,
-    hasActiveFilters: filters.category !== 'all' || filters.timeRange !== 'all' || filters.distance !== 'all' || filters.search.trim()
+    hasActiveFilters: filters.timeRange !== 'all' || filters.distance !== 'all' || filters.search.trim()
   };
 };

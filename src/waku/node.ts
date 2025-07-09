@@ -76,7 +76,6 @@ export const EventDataPacket = new protobuf.Type('EventDataPacket')
   .add(new protobuf.Field('id', 1, 'string'))
   .add(new protobuf.Field('title', 2, 'string'))
   .add(new protobuf.Field('description', 3, 'string'))
-  .add(new protobuf.Field('category', 4, 'string'))
   .add(new protobuf.Field('latitude', 5, 'double'))
   .add(new protobuf.Field('longitude', 6, 'double'))
   .add(new protobuf.Field('startDateTime', 7, 'string'))
@@ -114,7 +113,6 @@ export interface PortalEvent {
   id: string;
   title: string;
   description: string;
-  category: string;
   latitude: number;
   longitude: number;
   startDateTime: string;
@@ -792,12 +790,6 @@ export const getUpcomingEvents = (): PortalEvent[] => {
     const startTime = new Date(event.startDateTime);
     return startTime >= now && startTime <= next24Hours && event.isActive;
   });
-};
-
-export const getEventsByCategory = (category: string): PortalEvent[] => {
-  return eventCache.events.filter(event => 
-    event.category === category && event.isActive
-  );
 };
 
 export const cleanupExpiredEvents = () => {
