@@ -65,19 +65,19 @@ const setUserContext = async (userAddress) => {
   }
 };
 
-// Helper function to generate coordinate-based event ID (matches database function)
+// Helper function to generate coordinate-based event ID
 export const generateEventId = (latitude, longitude) => {
   const x = Math.round(latitude * 1000000);
   const y = Math.round(longitude * 1000000);
   return `${x},${y}`;
 };
 
-// Event management functions (updated for address-based system)
+// Event management functions
 export const createEvent = async (eventData, user) => {
   try {
     console.log('Creating event with address-based system:', eventData);
 
-    // Set user context for RLS (now uses address instead of publicKey)
+    // Set user context for RLS
     const { error: contextError } = await setUserContext(user.address);
     if (contextError) {
       return { data: null, error: `Context error: ${contextError}` };
@@ -86,7 +86,7 @@ export const createEvent = async (eventData, user) => {
     const { data, error } = await supabase.rpc('check_event_proximity_and_create', {
       p_latitude: eventData.latitude,
       p_longitude: eventData.longitude,
-      p_user_address: user.address, // Use address instead of publicKey
+      p_user_address: user.address,
       p_title: eventData.title,
       p_description: eventData.description || '',
       p_emoji: eventData.emoji || '🎉',
@@ -111,101 +111,77 @@ export const createEvent = async (eventData, user) => {
   }
 };
 
-export const joinEvent = async (eventId, userAddress) => {
+export const joinEvent = async (eventId: string, userAddress: string) => {
   try {
-    // Set user context for RLS
-    const { error: contextError } = await setUserContext(userAddress);
-    if (contextError) {
-      throw new Error(`Context error: ${contextError}`);
-    }
+    console.log('🔍 Joining event with transaction approach:', { eventId, userAddress });
 
-    // Get current event
-    const { data: event, error: fetchError } = await supabase
-      .from('events')
-      .select('*')
-      .eq('id', eventId)
-      .single();
-
-    if (fetchError) {
-      throw new Error('Event not found');
-    }
-
-    // Check if already attending
-    if (event.attendees.includes(userAddress)) {
-      throw new Error('Already attending this event');
-    }
-
-    // Check capacity
-    if (event.max_attendees && event.attendees.length >= event.max_attendees) {
-      throw new Error('Event is full');
-    }
-
-    // Add user to attendees
-    const updatedAttendees = [...event.attendees, userAddress];
-
-    const { data, error } = await supabase
-      .from('events')
-      .update({ attendees: updatedAttendees })
-      .eq('id', eventId)
-      .select()
-      .single();
+    // Use RPC function for proper transaction handling
+    const { data, error } = await supabase.rpc('join_event_with_rls', {
+      p_event_id: eventId,
+      p_user_address: userAddress
+    });
 
     if (error) {
-      throw new Error('Failed to join event');
+      console.error('❌ RPC call failed:', error);
+      throw new Error(`Database error: ${error.message}`);
     }
 
-    return { data, error: null };
+    // Parse the JSON response
+    const result = data;
+    
+    console.log('🔍 Join result:', result);
+    
+    if (!result.success) {
+      console.error('❌ Join operation failed:', result.error);
+      if (result.debug) {
+        console.log('🔍 Debug info:', result.debug);
+      }
+      throw new Error(result.error);
+    }
+
+    console.log('✅ Event joined successfully:', result.data.title);
+    return { data: result.data, error: null };
+
   } catch (err) {
-    return { data: null, error: err.message };
+    console.error('❌ Join event failed:', err);
+    return { data: null, error: (err as Error).message };
   }
 };
 
-export const leaveEvent = async (eventId, userAddress) => {
+export const leaveEvent = async (eventId: string, userAddress: string) => {
   try {
-    // Set user context for RLS
-    const { error: contextError } = await setUserContext(userAddress);
-    if (contextError) {
-      throw new Error(`Context error: ${contextError}`);
-    }
+    console.log('🔍 Leaving event with transaction approach:', { eventId, userAddress });
 
-    // Get current event
-    const { data: event, error: fetchError } = await supabase
-      .from('events')
-      .select('*')
-      .eq('id', eventId)
-      .single();
-
-    if (fetchError) {
-      throw new Error('Event not found');
-    }
-
-    // Check if attending
-    if (!event.attendees.includes(userAddress)) {
-      throw new Error('Not attending this event');
-    }
-
-    // Prevent creator from leaving
-    if (event.creator_address === userAddress) {
-      throw new Error('Cannot leave your own event.');
-    }
-
-    // Remove user from attendees
-    const updatedAttendees = event.attendees.filter(address => address !== userAddress);
-
-    const { data, error } = await supabase
-      .from('events')
-      .update({ attendees: updatedAttendees })
-      .eq('id', eventId)
-      .select()
-      .single();
+    // Use RPC for proper transaction handling
+    const { data, error } = await supabase.rpc('leave_event_with_rls', {
+      p_event_id: eventId,
+      p_user_address: userAddress
+    });
 
     if (error) {
-      throw new Error('Failed to leave event');
+      console.error('❌ RPC call failed:', error);
+      throw new Error(`Database error: ${error.message}`);
     }
 
-    return { data, error: null };
+    // Parse the JSON response
+    const result = data;
+    
+    console.log('🔍 Leave result:', result);
+    
+    if (!result.success) {
+      console.error('❌ Leave operation failed:', result.error);
+      if (result.debug) {
+        console.log('🔍 Debug info:', result.debug);
+      }
+      throw new Error(result.error);
+    }
+
+    console.log('✅ Event left successfully:', result.data.title);
+    return { data: result.data, error: null };
+
   } catch (err) {
-    return { data: null, error: err.message };
+    console.error('❌ Leave event failed:', err);
+    return { data: null, error: (err as Error).message };
   }
 };
 

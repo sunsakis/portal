@@ -320,13 +320,6 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
   const hasStarted = eventStart <= now
   const hasEnded = eventEnd <= now
 
-  // FIXED: Use the correct event status
-  const status = hasEnded 
-    ? { icon: '⏰', label: 'Event Ended', color: 'text-gray-400' }
-    : hasStarted 
-    ? { icon: '🎉', label: 'Event Live', color: 'text-green-400' }
-    : { icon: '📅', label: 'Upcoming Event', color: 'text-blue-400' };
-
   const handleJoin = async () => {
     setIsLoading(true)
     setError(null)
@@ -702,7 +695,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
                   )}
                 </div>
               ) : (
-                // NON-ATTENDEE: Shows Join Event button
+                // NON-ATTENDEE: Shows Attend button
                 <div className="flex gap-3">
                   <button
                     onClick={onClose}
@@ -723,7 +716,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
                         </>
                       ) : (
                         <>
-                          <span>Join Event</span>
+                          <span>Attend</span>
                           {event.max_attendees && (
                             <span className="text-xs opacity-75">
                               ({(event.attendees || []).length}/{event.max_attendees})
