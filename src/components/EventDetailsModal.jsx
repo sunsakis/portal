@@ -292,6 +292,10 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
     // Early return AFTER all hooks have been called
   if (!isOpen || !event) return null
 
+  const userAddress = user?.address;
+  const isMyEvent = event.creator_address === userAddress;
+  const isAttending = event.attendees && event.attendees.includes(userAddress);
+
   const formatDateTime = (dateTimeString) => {
     const date = new Date(dateTimeString)
     return {
