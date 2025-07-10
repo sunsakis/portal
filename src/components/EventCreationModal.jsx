@@ -15,6 +15,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [sliderTouched, setSliderTouched] = useState(false)
 
   const onEmojiSelect = (emoji) => {
     setEventData(prev => ({ ...prev, emoji: emoji.native }))
@@ -22,107 +23,109 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
   }
 
   useEffect(() => {
-  if (isOpen) {
-    const now = new Date()
-    const formatDate = (date) => date.toISOString().split('T')[0]
-    const formatTime = (date) => date.toTimeString().slice(0, 5)
-    
-    setEventData(prev => ({
-      ...prev,
-      startDate: formatDate(now),
-      startTime: formatTime(now),
-      duration: ''
-    }))
-  }
-}, [isOpen])
+    if (isOpen) {
+      const now = new Date()
+      const formatDate = (date) => date.toISOString().split('T')[0]
+      const formatTime = (date) => date.toTimeString().slice(0, 5)
+      
+      setEventData(prev => ({
+        ...prev,
+        startDate: formatDate(now),
+        startTime: formatTime(now),
+        duration: ''
+      }))
+      setSliderTouched(false) // Reset slider touched state when modal opens
+    }
+  }, [isOpen])
 
   const validateAndCreateEvent = async () => {
-  setError(null)
-
-  // Check for missing title
-  if (!eventData.title.trim()) {
-    setError('Please enter a title for your event')
-    setTimeout(() => setError(null), 5000)
-    return
-  }
-
-  // Check for missing emoji
-  if (!eventData.emoji) {
-    setError('Please select an emoji for your event - click the emoji button to choose one')
-    setTimeout(() => setError(null), 5000)
-    return
-  }
-
-  // Check for missing start date/time
-  if (!eventData.startDate || !eventData.startTime) {
-    setError('Please select a start date and time for your event')
-    setTimeout(() => setError(null), 5000)
-    return
-  }
-
-  // Check for missing duration
-  if (!eventData.duration) {
-    setError('Please select a duration for your event')
-    setTimeout(() => setError(null), 5000)
-    return
-  }
-
-  // Calculate start and end times
-  const startDateTime = new Date(`${eventData.startDate}T${eventData.startTime}`)
-  const endDateTime = new Date(startDateTime.getTime() + (eventData.duration * 60 * 60 * 1000))
-
-  // Check if event is in the past
-  if (startDateTime < new Date()) {
-    setError('Event cannot be scheduled in the past - please choose a future date and time')
-    setTimeout(() => setError(null), 5000)
-    return
-  }
-
-  // Duration validation (should always pass since slider limits to 6 hours, but good to have)
-  if (eventData.duration > 6) {
-    setError('Event duration cannot exceed 6 hours')
-    setTimeout(() => setError(null), 5000)
-    return
-  }
+    setError(null)
 
     // Check for missing title
-  if (!eventData.description.trim()) {
-    setError('Please enter the description for your event')
-    setTimeout(() => setError(null), 5000)
-    return
-  }
-
-  // If we get here, all validations passed
-  setIsLoading(true)
-
-  try {
-    const eventPayload = {
-      ...eventData,
-      latitude: location.lat,
-      longitude: location.lng,
-      startDateTime: startDateTime.toISOString(),
-      endDateTime: endDateTime.toISOString(),
-      createdAt: new Date().toISOString()
+    if (!eventData.title.trim()) {
+      setError('Please enter a title for your event')
+      setTimeout(() => setError(null), 5000)
+      return
     }
 
-    await onCreateEvent(eventPayload)
-    
-    setEventData({
-      title: '',
-      emoji: '',
-      description: '',
-      startDate: '',
-      startTime: '',
-      duration: 2 // Reset to default 2 hours
-    })
-    
-    onClose()
-  } catch (err) {
-    setError(err.message || 'Failed to create event')
-  } finally {
-    setIsLoading(false)
+    // Check for missing emoji
+    if (!eventData.emoji) {
+      setError('Please select an emoji for your event - click the emoji button to choose one')
+      setTimeout(() => setError(null), 5000)
+      return
+    }
+
+    // Check for missing start date/time
+    if (!eventData.startDate || !eventData.startTime) {
+      setError('Please select a start date and time for your event')
+      setTimeout(() => setError(null), 5000)
+      return
+    }
+
+    // Check for missing duration
+    if (!eventData.duration) {
+      setError('Please select a duration for your event')
+      setTimeout(() => setError(null), 5000)
+      return
+    }
+
+    // Calculate start and end times
+    const startDateTime = new Date(`${eventData.startDate}T${eventData.startTime}`)
+    const endDateTime = new Date(startDateTime.getTime() + (eventData.duration * 60 * 60 * 1000))
+
+    // Check if event is in the past
+    if (startDateTime < new Date()) {
+      setError('Event cannot be scheduled in the past - please choose a future date and time')
+      setTimeout(() => setError(null), 5000)
+      return
+    }
+
+    // Duration validation (should always pass since slider limits to 6 hours, but good to have)
+    if (eventData.duration > 6) {
+      setError('Event duration cannot exceed 6 hours')
+      setTimeout(() => setError(null), 5000)
+      return
+    }
+
+    // Check for missing description
+    if (!eventData.description.trim()) {
+      setError('Please enter the description for your event')
+      setTimeout(() => setError(null), 5000)
+      return
+    }
+
+    // If we get here, all validations passed
+    setIsLoading(true)
+
+    try {
+      const eventPayload = {
+        ...eventData,
+        latitude: location.lat,
+        longitude: location.lng,
+        startDateTime: startDateTime.toISOString(),
+        endDateTime: endDateTime.toISOString(),
+        createdAt: new Date().toISOString()
+      }
+
+      await onCreateEvent(eventPayload)
+      
+      setEventData({
+        title: '',
+        emoji: '',
+        description: '',
+        startDate: '',
+        startTime: '',
+        duration: '' // Reset to empty
+      })
+      setSliderTouched(false) // Reset slider touched state
+      
+      onClose()
+    } catch (err) {
+      setError(err.message || 'Failed to create event')
+    } finally {
+      setIsLoading(false)
+    }
   }
-}
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -290,7 +293,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-3">
-                  Event Duration: {eventData.duration || 2} hour{(eventData.duration || 2) === 1 ? '' : 's'}
+                  Event Duration: {eventData.duration || 1} hour{(eventData.duration || 1) === 1 ? '' : 's'}
                 </label>
                 <div className="relative">
                   <input
@@ -298,8 +301,11 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                     min="1"
                     max="6"
                     step="0.5"
-                    value={eventData.duration || 2}
-                    onChange={(e) => setEventData(prev => ({ ...prev, duration: parseFloat(e.target.value) }))}
+                    value={eventData.duration || 1}
+                    onChange={(e) => {
+                      setSliderTouched(true)
+                      setEventData(prev => ({ ...prev, duration: parseFloat(e.target.value) }))
+                    }}
                     className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer 
                               [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 
                               [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gradient-to-br [&::-webkit-slider-thumb]:from-blue-500 [&::-webkit-slider-thumb]:to-purple-600 
@@ -311,11 +317,13 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                               [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:transition-transform [&::-moz-range-thumb]:hover:scale-110
                               [&::-moz-range-thumb]:border-none"
                     style={{
-                      background: `linear-gradient(to right, 
-                        #3b82f6 0%, 
-                        #3b82f6 ${((eventData.duration || 2) - 1) / 5 * 100}%, 
-                        #4b5563 ${((eventData.duration || 2) - 1) / 5 * 100}%, 
-                        #4b5563 100%)`
+                      background: sliderTouched 
+                        ? `linear-gradient(to right, 
+                            #3b82f6 0%, 
+                            #3b82f6 ${((eventData.duration || 1) - 1) / 5 * 100}%, 
+                            #4b5563 ${((eventData.duration || 2) - 1) / 5 * 100}%, 
+                            #4b5563 100%)`
+                        : '#4b5563'
                     }}
                   />
                   <div className="flex justify-between text-xs text-gray-400 mt-2">
@@ -329,12 +337,12 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                   
                   {/* Fun emoji indicators */}
                   <div className="flex justify-between absolute -top-8 w-full text-lg pointer-events-none">
-                    <span className={`transition-all duration-200 ${(eventData.duration || 2) >= 1 ? 'opacity-0 scale-0' : 'opacity-0'}`}>⚡</span>
-                    <span className={`transition-all duration-200 ${(eventData.duration || 2) >= 2 ? 'opacity-0 scale-0' : 'opacity-0'}`}>☕</span>
-                    <span className={`transition-all duration-200 ${(eventData.duration || 2) >= 3 ? 'opacity-0 scale-0' : 'opacity-0'}`}>🍕</span>
-                    <span className={`transition-all duration-200 ${(eventData.duration || 2) >= 4 ? 'opacity-0 scale-0' : 'opacity-0'}`}>🎬</span>
-                    <span className={`transition-all duration-200 ${(eventData.duration || 2) >= 5 ? 'opacity-0 scale-0' : 'opacity-0'}`}>🎉</span>
-                    <span className={`transition-all duration-200 ${(eventData.duration || 2) >= 6 ? 'opacity-100 scale-110' : 'opacity-50'}`}>⚡</span>
+                    <span className={`transition-all duration-200 ${(eventData.duration || 1) >= 1 ? 'opacity-0 scale-0' : 'opacity-0'}`}>⚡</span>
+                    <span className={`transition-all duration-200 ${(eventData.duration || 1) >= 2 ? 'opacity-0 scale-0' : 'opacity-0'}`}>☕</span>
+                    <span className={`transition-all duration-200 ${(eventData.duration || 1) >= 3 ? 'opacity-0 scale-0' : 'opacity-0'}`}>🍕</span>
+                    <span className={`transition-all duration-200 ${(eventData.duration || 1) >= 4 ? 'opacity-0 scale-0' : 'opacity-0'}`}>🎬</span>
+                    <span className={`transition-all duration-200 ${(eventData.duration || 1) >= 5 ? 'opacity-0 scale-0' : 'opacity-0'}`}>🎉</span>
+                    <span className={`transition-all duration-200 ${(eventData.duration || 1) >= 6 ? 'opacity-100 scale-110' : 'opacity-50'}`}>⚡</span>
                   </div>
                 </div>
               </div>

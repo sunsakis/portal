@@ -22,7 +22,6 @@ const generatePortalId = (latitude, longitude) => {
   return `${x},${y}`;
 };
 
-// Simplified crypto-only identity hook
 export const useCryptoIdentity = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -32,16 +31,21 @@ export const useCryptoIdentity = () => {
       // Get the Waku cryptographic identity
       const wakuIdent = idStore.getMasterIdent();
       
-      // Create user object with crypto identity as the primary ID
+      // Create user object with address as the primary ID (simplified system)
       const cryptoUser = {
-        id: wakuIdent.publicKey,
-        publicKey: wakuIdent.publicKey,
-        address: wakuIdent.account.address,
-        wakuIdent: wakuIdent,
+        address: wakuIdent.account.address,     // Primary ID (42 chars, familiar format)
+        publicKey: wakuIdent.publicKey,         // Keep for Waku operations
+        wakuIdent: wakuIdent,                   // Full crypto identity object
         nickname: nickname,
         created_at: new Date().toISOString(),
         displayName: nickname || 'Anon',
       };
+
+      console.log('✅ Crypto identity initialized:', {
+        address: cryptoUser.address,
+        publicKey: cryptoUser.publicKey.slice(0, 20) + '...',
+        nickname: cryptoUser.nickname
+      });
 
       setUser(cryptoUser);
     } catch (err) {
@@ -169,9 +173,6 @@ export const useGeolocation = () => {
   return { location, error, loading, getCurrentLocation };
 };
 
-/**
- * Events stored in Supabase with Waku chat functionality
- */
 export const useEvents = (user) => {
   const [events, setEvents] = useState([]);
   const [userEvent, setUserEvent] = useState(null);
@@ -184,7 +185,8 @@ export const useEvents = (user) => {
     try {
       console.log('Fetching events from Supabase...');
 
-      const { data, error: fetchError } = await fetchSupabaseEvents();
+      // Pass user address for context setting
+      const { data, error: fetchError } = await fetchSupabaseEvents(user?.address);
 
       if (fetchError) {
         console.error('Supabase event fetch error:', fetchError);
@@ -197,7 +199,8 @@ export const useEvents = (user) => {
 
       // Add frontend compatibility fields and Waku portal identities
       const formattedEvents = data.map(event => {
-        const portalId = generatePortalId(event.latitude, event.longitude);
+        // For coordinate-based IDs, portalId is the same as event ID
+        const portalId = event.id; // Already in "lat,lng" format
 
         // Ensure each event has a Waku identity for chat
         idStore.getPortalIdent(portalId);
@@ -206,22 +209,24 @@ export const useEvents = (user) => {
           ...event,
           // Add portal-compatible fields
           portalId,
-          isMyEvent: event.creator_pubkey === user?.publicKey, // Updated to use publicKey
+          isMyEvent: event.creator_address === user?.address, // Changed from publicKey to address
           // Keep original event fields
           attendees: event.attendees || [],
           attendeeCount: (event.attendees || []).length,
           // Add backward compatibility
           profiles: {
-            username: event.creator_pubkey === user?.publicKey ? 'You' : 'Event Creator',
+            username: event.creator_address === user?.address ? 'You' : 'Event Creator',
             avatar_url: null,
           },
+          // Map address fields for backward compatibility
+          creator_pubkey: event.creator_address, // For components that still expect this
         };
       });
 
       setEvents(formattedEvents);
 
       // Find user's event (they can only have one active event at a time)
-      const myEvent = formattedEvents.find(e => e.creator_pubkey === user?.publicKey);
+      const myEvent = formattedEvents.find(e => e.creator_address === user?.address);
       setUserEvent(myEvent || null);
 
       setConnectionStatus('connected');
@@ -231,13 +236,13 @@ export const useEvents = (user) => {
       setConnectionStatus('error');
       setError(err.message);
     }
-  }, [user?.publicKey]); // Updated dependency
+  }, [user?.address]); // Changed dependency from publicKey to address
 
   // Monitor Supabase events
   useEffect(() => {
     if (!user) return;
 
-    console.log('Starting Supabase event monitoring for user:', user.publicKey);
+    console.log('Starting Supabase event monitoring for user:', user.address);
 
     // Initial fetch
     fetchEvents();
@@ -285,6 +290,7 @@ export const useEvents = (user) => {
       setLoading(true);
       console.log('Creating event/portal with server-side proximity check:', eventData);
 
+      // Pass user object (contains address)
       const { data, error: createError } = await createSupabaseEvent(eventData, user);
 
       if (createError) {
@@ -295,7 +301,7 @@ export const useEvents = (user) => {
 
       console.log('Event creation successful:', data);
 
-      // Create Waku identity for this event's chat
+      // Create Waku identity for this event's chat using coordinate-based ID
       const portalId = generatePortalId(eventData.latitude, eventData.longitude);
       idStore.getPortalIdent(portalId);
       console.log('Created Waku identity for event chat:', portalId);
@@ -313,7 +319,7 @@ export const useEvents = (user) => {
   };
 
   const joinEvent = async (eventId) => {
-    if (!user?.publicKey) { // Updated to use publicKey
+    if (!user?.address) {
       throw new Error('User not authenticated');
     }
 
@@ -323,7 +329,8 @@ export const useEvents = (user) => {
     try {
       console.log('Joining event:', eventId);
       
-      const { data, error: joinError } = await joinSupabaseEvent(eventId, user.publicKey);
+      // Pass user's address directly
+      const { data, error: joinError } = await joinSupabaseEvent(eventId, user.address);
       
       if (joinError) {
         throw new Error(joinError);
@@ -346,7 +353,7 @@ export const useEvents = (user) => {
   };
 
   const leaveEvent = async (eventId) => {
-    if (!user?.publicKey) { // Updated to use publicKey
+    if (!user?.address) {
       throw new Error('User not authenticated');
     }
 
@@ -356,7 +363,8 @@ export const useEvents = (user) => {
     try {
       console.log('Leaving event:', eventId);
       
-      const { data, error: leaveError } = await leaveSupabaseEvent(eventId, user.publicKey);
+      // Pass user's address directly
+      const { data, error: leaveError } = await leaveSupabaseEvent(eventId, user.address);
       
       if (leaveError) {
         throw new Error(leaveError);
@@ -379,7 +387,7 @@ export const useEvents = (user) => {
   };
 
   const cancelEvent = async (eventId) => {
-    if (!user?.publicKey) { // Updated to use publicKey
+    if (!user?.address) {
       throw new Error('User not authenticated');
     }
 
@@ -389,7 +397,8 @@ export const useEvents = (user) => {
     try {
       console.log('Cancelling event:', eventId);
       
-      const { data, error: cancelError } = await cancelSupabaseEvent(eventId, user.publicKey);
+      // Pass user's address directly
+      const { data, error: cancelError } = await cancelSupabaseEvent(eventId, user.address);
       
       if (cancelError) {
         throw new Error(cancelError);
@@ -398,7 +407,7 @@ export const useEvents = (user) => {
       console.log('✅ Successfully cancelled event:', data.title);
 
       // Remove Waku identity for this event's chat
-      const portalId = generatePortalId(data.latitude, data.longitude);
+      const portalId = eventId; // For coordinate-based IDs, portalId = eventId
       idStore.removePortalIdent(portalId);
       console.log('Removed Waku identity for event chat:', portalId);
       
@@ -448,14 +457,14 @@ export const useEvents = (user) => {
   }, [events]);
 
   const myEvents = useCallback(() => {
-    return events.filter(event => event.creator_pubkey === user?.publicKey); // Updated to use publicKey
+    return events.filter(event => event.creator_address === user?.address);
   }, [events, user]);
 
   const attendingEvents = useCallback(() => {
-    if (!user?.publicKey) return []; // Updated to use publicKey
+    if (!user?.address) return [];
     return events.filter(event => 
-      event.attendees.includes(user.publicKey) && 
-      event.creator_pubkey !== user.publicKey // Updated to use publicKey
+      event.attendees.includes(user.address) && 
+      event.creator_address !== user.address
     );
   }, [events, user]);
 

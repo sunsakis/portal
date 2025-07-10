@@ -289,12 +289,20 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
     }
   }, [isOpen, activeTab]);
 
-  // Early return AFTER all hooks have been called
+    // Early return AFTER all hooks have been called
   if (!isOpen || !event) return null
 
-  const userPubkey = user?.wakuIdent?.publicKey
-  const isMyEvent = event.creator_user_id === user?.id
-  const isAttending = event.attendees && event.attendees.includes(userPubkey)
+  // UPDATED: Check ownership using creator_address (not creator_pubkey)
+  const userAddress = user?.address;
+  const isMyEvent = event.creator_address === userAddress;
+  const isAttending = event.attendees && event.attendees.includes(userAddress);
+  
+  console.log('Event ownership check:', {
+    eventCreatorAddress: event.creator_address,
+    userAddress: userAddress,
+    isMyEvent: isMyEvent,
+    isAttending: isAttending
+  });
   
   const formatDateTime = (dateTimeString) => {
     const date = new Date(dateTimeString)
@@ -319,6 +327,13 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
   const eventEnd = new Date(event.end_datetime)
   const hasStarted = eventStart <= now
   const hasEnded = eventEnd <= now
+
+  // FIXED: Use the correct event status
+  const status = hasEnded 
+    ? { icon: '⏰', label: 'Event Ended', color: 'text-gray-400' }
+    : hasStarted 
+    ? { icon: '🎉', label: 'Event Live', color: 'text-green-400' }
+    : { icon: '📅', label: 'Upcoming Event', color: 'text-blue-400' };
 
   const handleJoin = async () => {
     setIsLoading(true)
@@ -651,7 +666,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
             </div>
           )}
 
-          {/* Action Buttons (only shown when not in chat tab) */}
+          {/* FIXED Action Buttons */}
           {activeTab !== 'chat' && (
             <div className="p-6 border-t border-gray-700 flex-shrink-0">
               {hasEnded ? (
@@ -659,6 +674,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
                   This event has ended
                 </div>
               ) : isMyEvent ? (
+                // EVENT OWNER: Shows Cancel Event button
                 <div className="flex gap-3">
                   <button
                     onClick={onClose}
@@ -675,6 +691,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
                   </button>
                 </div>
               ) : isAttending ? (
+                // ATTENDEE: Shows Leave Event button
                 <div className="flex gap-3">
                   <button
                     onClick={onClose}
@@ -693,6 +710,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
                   )}
                 </div>
               ) : (
+                // NON-ATTENDEE: Shows Join Event button
                 <div className="flex gap-3">
                   <button
                     onClick={onClose}
