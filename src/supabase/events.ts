@@ -20,7 +20,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 })
 
-// Helper function to set user context for RLS (now uses address)
 const setUserContext = async (userAddress) => {
   if (!userAddress) {
     console.warn('No user address provided for context setting');
@@ -28,18 +27,40 @@ const setUserContext = async (userAddress) => {
   }
 
   try {
-    const { error } = await supabase.rpc('set_current_user_context', {
+    console.log('🔧 Setting user context for:', userAddress);
+    
+    // Call the function and wait for completion
+    const { data, error } = await supabase.rpc('set_current_user_context', {
       user_address: userAddress
     });
 
     if (error) {
-      console.error('Failed to set user context:', error);
+      console.error('❌ Failed to set user context:', error);
       return { error: error.message };
     }
 
+    // Verify the context was set correctly
+    const { data: verification, error: verifyError } = await supabase.rpc('get_current_user_setting');
+    
+    if (verifyError) {
+      console.error('❌ Failed to verify user context:', verifyError);
+      return { error: 'Failed to verify context' };
+    }
+
+    console.log('🔍 Context verification:', {
+      expected: userAddress,
+      actual: verification,
+      matches: verification === userAddress
+    });
+
+    if (verification !== userAddress) {
+      return { error: `Context mismatch: expected ${userAddress}, got ${verification}` };
+    }
+
+    console.log('✅ User context set and verified successfully');
     return { error: null };
   } catch (err) {
-    console.error('Error setting user context:', err);
+    console.error('❌ Error setting user context:', err);
     return { error: err.message };
   }
 };
@@ -188,206 +209,40 @@ export const leaveEvent = async (eventId, userAddress) => {
   }
 };
 
-// Ultra-comprehensive debug version to find the exact issue
-export const cancelEvent = async (eventId, userAddress) => {
+export const cancelEvent = async (eventId: string, userAddress: string) => {
   try {
-    console.log('🔍 COMPREHENSIVE DEBUG: Starting cancel process');
-    console.log('📋 Input params:', { eventId, userAddress });
+    console.log('🔍 Cancelling event with working transaction approach:', { eventId, userAddress });
 
-    // STEP 1: Set user context
-    console.log('\n=== STEP 1: Setting User Context ===');
-    const { error: contextError } = await setUserContext(userAddress);
-    if (contextError) {
-      console.error('❌ Context error:', contextError);
-    } else {
-      console.log('✅ Context set successfully');
-    }
-
-    // STEP 2: Verify context was set
-    console.log('\n=== STEP 2: Verifying Context ===');
-    try {
-      const { data: setting, error: settingError } = await supabase.rpc('get_current_user_setting');
-      console.log('🔍 Current setting:', { setting, settingError, matches: setting === userAddress });
-    } catch (err) {
-      console.log('⚠️ Could not check setting:', err.message);
-    }
-
-    // STEP 3: Check RLS policies
-    console.log('\n=== STEP 3: Checking RLS Policies ===');
-    try {
-      const { data: policies, error: policyError } = await supabase
-        .from('pg_policies')
-        .select('policyname, cmd, qual')
-        .eq('tablename', 'events');
-      console.log('🔍 Active policies:', policies);
-    } catch (err) {
-      console.log('⚠️ Could not check policies:', err.message);
-    }
-
-    // STEP 4: Verify event exists
-    console.log('\n=== STEP 4: Event Existence Check ===');
-    const { data: eventCheck, error: eventError, count: eventCount } = await supabase
-      .from('events')
-      .select('*', { count: 'exact' })
-      .eq('id', eventId);
-
-    console.log('🔍 Event check result:', { 
-      eventCheck, 
-      eventError, 
-      eventCount,
-      found: eventCheck && eventCheck.length > 0 
+    // Use the transaction-based cancel function that we know works
+    const { data, error } = await supabase.rpc('cancel_event_with_rls', {
+      p_event_id: eventId,
+      p_user_address: userAddress
     });
 
-    if (eventError) {
-      throw new Error('Event fetch failed: ' + eventError.message);
+    if (error) {
+      console.error('❌ RPC call failed:', error);
+      throw new Error(`Database error: ${error.message}`);
     }
 
-    if (!eventCheck || eventCheck.length === 0) {
-      throw new Error('Event not found');
-    }
-
-    const event = eventCheck[0];
-    console.log('📋 Event details:', {
-      id: event.id,
-      title: event.title,
-      creator_address: event.creator_address,
-      is_active: event.is_active,
-      attendees: event.attendees
-    });
-
-    // STEP 5: Ownership verification
-    console.log('\n=== STEP 5: Ownership Verification ===');
-    const ownershipMatch = event.creator_address === userAddress;
-    console.log('🔍 Ownership check:', {
-      eventCreator: event.creator_address,
-      currentUser: userAddress,
-      matches: ownershipMatch,
-      creatorLength: event.creator_address.length,
-      userLength: userAddress.length,
-      caseSensitive: event.creator_address.toLowerCase() === userAddress.toLowerCase()
-    });
-
-    if (!ownershipMatch) {
-      throw new Error(`Ownership mismatch: Event creator "${event.creator_address}" !== User "${userAddress}"`);
-    }
-
-    if (!event.is_active) {
-      throw new Error('Event is already cancelled');
-    }
-
-    // STEP 6: Test different update approaches
-    console.log('\n=== STEP 6: Testing Update Approaches ===');
-
-    // Approach 1: Basic update with both filters
-    console.log('🔄 Approach 1: Basic update with filters...');
-    const { data: data1, error: error1, status: status1, statusText: statusText1 } = await supabase
-      .from('events')
-      .update({ is_active: false })
-      .eq('id', eventId)
-      .eq('creator_address', userAddress)
-      .select('*');
-
-    console.log('🔍 Approach 1 result:', { 
-      data: data1, 
-      error: error1, 
-      status: status1, 
-      statusText: statusText1,
-      dataLength: data1 ? data1.length : 0 
-    });
-
-    if (error1) {
-      console.error('❌ Approach 1 error details:', {
-        message: error1.message,
-        details: error1.details,
-        hint: error1.hint,
-        code: error1.code
-      });
-    }
-
-    if (data1 && data1.length > 0) {
-      console.log('✅ Approach 1 succeeded!');
-      return { data: data1[0], error: null };
-    }
-
-    // Approach 2: Update with only ID filter
-    console.log('🔄 Approach 2: Update with only ID filter...');
-    const { data: data2, error: error2 } = await supabase
-      .from('events')
-      .update({ is_active: false })
-      .eq('id', eventId)
-      .select('*');
-
-    console.log('🔍 Approach 2 result:', { 
-      data: data2, 
-      error: error2,
-      dataLength: data2 ? data2.length : 0 
-    });
-
-    if (error2) {
-      console.error('❌ Approach 2 error:', error2);
-    }
-
-    if (data2 && data2.length > 0) {
-      // Verify we updated the right event
-      const updated = data2[0];
-      if (updated.creator_address === userAddress) {
-        console.log('✅ Approach 2 succeeded!');
-        return { data: updated, error: null };
-      } else {
-        // Rollback
-        await supabase
-          .from('events')
-          .update({ is_active: true })
-          .eq('id', eventId);
-        throw new Error('Security violation: Updated wrong event');
+    // Parse the JSON response
+    const result = data;
+    
+    console.log('🔍 Cancel result:', result);
+    
+    if (!result.success) {
+      console.error('❌ Cancel operation failed:', result.error);
+      if (result.debug) {
+        console.log('🔍 Debug info:', result.debug);
       }
+      throw new Error(result.error);
     }
 
-    // Approach 3: Use upsert
-    console.log('🔄 Approach 3: Using upsert...');
-    const { data: data3, error: error3 } = await supabase
-      .from('events')
-      .upsert({ 
-        id: eventId,
-        is_active: false,
-        // Include other required fields to avoid constraint errors
-        latitude: event.latitude,
-        longitude: event.longitude,
-        title: event.title,
-        creator_address: event.creator_address,
-        start_datetime: event.start_datetime,
-        end_datetime: event.end_datetime
-      })
-      .select('*');
-
-    console.log('🔍 Approach 3 result:', { 
-      data: data3, 
-      error: error3,
-      dataLength: data3 ? data3.length : 0 
-    });
-
-    if (data3 && data3.length > 0) {
-      console.log('✅ Approach 3 succeeded!');
-      return { data: data3[0], error: null };
-    }
-
-    // STEP 7: Check database constraints
-    console.log('\n=== STEP 7: Checking Constraints ===');
-    try {
-      const { data: constraints } = await supabase
-        .rpc('check_table_constraints', { table_name: 'events' })
-        .single();
-      console.log('🔍 Table constraints:', constraints);
-    } catch (err) {
-      console.log('⚠️ Could not check constraints:', err.message);
-    }
-
-    // If we get here, nothing worked
-    throw new Error('All update approaches failed - this is a deep database issue');
+    console.log('✅ Event cancelled successfully:', result.data.title);
+    return { data: result.data, error: null };
 
   } catch (err) {
-    console.error('❌ Comprehensive debug error:', err);
-    return { data: null, error: err.message };
+    console.error('❌ Cancel event failed:', err);
+    return { data: null, error: (err as Error).message };
   }
 };
 
@@ -420,7 +275,6 @@ export const fetchEvents = async (userAddress = null) => {
     return { data: [], error: err.message };
   }
 };
-
 
 // -- SIMPLIFIED DATABASE SCHEMA WITH ADDRESSES AND COORDINATE IDS
 

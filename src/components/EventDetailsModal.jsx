@@ -292,18 +292,6 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
     // Early return AFTER all hooks have been called
   if (!isOpen || !event) return null
 
-  // UPDATED: Check ownership using creator_address (not creator_pubkey)
-  const userAddress = user?.address;
-  const isMyEvent = event.creator_address === userAddress;
-  const isAttending = event.attendees && event.attendees.includes(userAddress);
-  
-  console.log('Event ownership check:', {
-    eventCreatorAddress: event.creator_address,
-    userAddress: userAddress,
-    isMyEvent: isMyEvent,
-    isAttending: isAttending
-  });
-  
   const formatDateTime = (dateTimeString) => {
     const date = new Date(dateTimeString)
     return {
@@ -558,7 +546,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
                     </div>
                     <div className="flex-1">
                       <div className="text-gray-100 font-medium">
-                        {attendeePubkey === userPubkey 
+                        {attendeePubkey === userAddress
                           ? 'You' 
                           : attendeePubkey === event.creator_pubkey 
                             ? 'Event Creator' 
