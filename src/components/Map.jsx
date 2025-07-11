@@ -561,47 +561,48 @@ export default function Map() {
         onCancel={handleCancelEvent}
       />
 
-      {/* Enhanced Hybrid Status Indicator */}
-      <div className='fixed top-4 right-4 z-[1500]'>
-        <motion.div
-          animate={{
-            scale: (connectionStatus === 'connecting' || wakuStatus === 'connecting')
-              ? [1, 1.2, 1]
-              : 1,
-            opacity: (connectionStatus === 'connected' && wakuStatus === 'connected')
-              ? 0.8
-              : 1,
-          }}
-          transition={{
-            repeat: (connectionStatus === 'connecting' || wakuStatus === 'connecting')
-              ? Infinity
-              : 0,
-            duration: 1.5,
-          }}
-          className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-2 ${
-            connectionStatus === 'connected' && wakuStatus === 'connected'
-              ? 'bg-green-500 text-white'
-              : (connectionStatus === 'connecting' || wakuStatus === 'connecting')
-              ? 'bg-yellow-500 text-white'
-              : 'bg-red-500 text-white'
-          }`}
-        >
-          <span className='text-sm'>🌀</span>
-          <span>
-            {connectionStatus === 'connected' && wakuStatus === 'connected'
-              ? 'p2p on'
-              : (connectionStatus === 'connecting' || wakuStatus === 'connecting')
-              ? 'Connecting...'
-              : 'p2p off'}
-          </span>
-          {friends.length > 0 && (
-            <>
-              <div className='w-1 h-1 bg-white rounded-full opacity-60'></div>
-              <span className='text-xs'>{friends.length} friends</span>
-            </>
-          )}
-        </motion.div>
-      </div>
+      {/* LIVE Status Indicator - Only shows when connected */}
+      <AnimatePresence>
+        {connectionStatus === 'connected' && wakuStatus === 'connected' && (
+          <div className='fixed top-4 right-4 z-[1500]'>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="bg-black/80 backdrop-blur-sm text-white px-3 py-2 rounded-full text-xs font-medium flex items-center gap-2 border border-red-600/30"
+            >
+              {/* Blinking red dot */}
+              <motion.div
+                animate={{
+                  opacity: [1, 0.3, 1],
+                  scale: [1, 0.8, 1]
+                }}
+                transition={{
+                  duration: 1.5,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+                className="w-2 h-2 bg-red-800 rounded-full"
+              />
+              
+              {/* LIVE text */}
+              <motion.span
+                animate={{
+                  opacity: [1, 0.7, 1]
+                }}
+                transition={{
+                  duration: 1.5,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+                className="text-red-600 font-bold tracking-wider"
+              >
+                LIVE
+              </motion.span>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Footer Banner */}
       <div className="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm text-white py-2 px-4 z-[1500]">
