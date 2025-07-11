@@ -340,7 +340,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                 Event Duration: {eventData.duration || 1} hour{(eventData.duration || 1) === 1 ? '' : 's'}
               </label>
               <div 
-                className="relative"
+                className="relative px-1"
                 onMouseDown={handleSliderMouseDown}
                 onTouchStart={handleSliderTouchStart}
               >
@@ -375,7 +375,8 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                           #4b5563 ${((eventData.duration || 1) - 1) / 5 * 100}%, 
                           #4b5563 100%)`
                       : '#4b5563',
-                    touchAction: 'manipulation' // KEY FIX: Enable proper touch handling
+                    touchAction: 'manipulation', // KEY FIX: Enable proper touch handling
+                    padding: '0 3px' // FIX: Add padding to prevent thumb cutoff
                   }}
                 />
                 <div className="flex justify-between text-xs text-gray-400 mt-2 px-1">
@@ -387,13 +388,8 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                   <span>6h</span>
                 </div>
                 
-                {/* Fun emoji indicators */}
-                <div className="flex justify-between absolute -top-8 w-full text-lg pointer-events-none px-1">
-                  <span className={`transition-all duration-200 ${(eventData.duration || 1) >= 6 ? 'opacity-100 scale-110' : 'opacity-50'}`}>⚡</span>
-                  <span className={`transition-all duration-200 opacity-50`}>☕</span>
-                  <span className={`transition-all duration-200 opacity-50`}>🍕</span>
-                  <span className={`transition-all duration-200 opacity-50`}>🎬</span>
-                  <span className={`transition-all duration-200 opacity-50`}>🎉</span>
+                {/* Thunder bolt indicator for max duration */}
+                <div className="absolute -top-8 right-1 text-lg pointer-events-none">
                   <span className={`transition-all duration-200 ${(eventData.duration || 1) >= 6 ? 'opacity-100 scale-110' : 'opacity-50'}`}>⚡</span>
                 </div>
               </div>
