@@ -83,16 +83,19 @@ export const createEvent = async (eventData, user) => {
       return { data: null, error: `Context error: ${contextError}` };
     }
 
+    // Updated parameter order to match the fixed function signature
     const { data, error } = await supabase.rpc('check_event_proximity_and_create', {
       p_latitude: eventData.latitude,
       p_longitude: eventData.longitude,
       p_user_address: user.address,
       p_title: eventData.title,
-      p_description: eventData.description || '',
-      p_emoji: eventData.emoji || '🎉',
       p_start_datetime: eventData.startDateTime,
       p_end_datetime: eventData.endDateTime,
-      p_max_attendees: eventData.maxAttendees || null
+      p_description: eventData.description || '',
+      p_emoji: eventData.emoji || '🎉',
+      p_max_attendees: eventData.maxAttendees || null,
+      p_image_url: eventData.imageUrl || null,
+      p_image_ipfs_hash: eventData.imageIpfsHash || null
     });
 
     if (error) {

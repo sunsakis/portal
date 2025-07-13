@@ -1,13 +1,121 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useP2PMessages, useFriendRequests } from '../hooks/hooks'
+import { useP2PMessages } from '../hooks/hooks'
 import {
-  frenRequests,
   getPetName,
   idStore,
-  waku_acceptFriendRequest,
   waku_SendFrenMessage,
 } from '../waku/node'
+
+// Mobile-friendly image component with loading and error states
+const EventImage = ({ imageUrl, alt, className = "" }) => {
+  const [isLoading, setIsLoading] = useState(true)
+  const [hasError, setHasError] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  const handleImageLoad = () => {
+    setIsLoading(false)
+    setHasError(false)
+  }
+
+  const handleImageError = () => {
+    setIsLoading(false)
+    setHasError(true)
+  }
+
+  const openFullscreen = () => {
+    setIsFullscreen(true)
+  }
+
+  const closeFullscreen = () => {
+    setIsFullscreen(false)
+  }
+
+  if (hasError) {
+    return (
+      <div className={`bg-gray-700 rounded-lg flex items-center justify-center ${className}`}>
+        <div className="text-center text-gray-400 p-4">
+          <span className="text-2xl mb-2 block">🖼️</span>
+          <p className="text-sm">Image unavailable</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className={`relative overflow-hidden rounded-lg ${className}`}>
+        {/* Loading skeleton */}
+        {isLoading && (
+          <div className="absolute inset-0 bg-gray-700 animate-pulse flex items-center justify-center">
+            <div className="text-gray-500">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-400"></div>
+            </div>
+          </div>
+        )}
+        
+        {/* Actual image */}
+        <img
+          src={imageUrl}
+          alt={alt}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
+          onClick={openFullscreen}
+          className={`w-full h-full object-cover cursor-pointer transition-opacity duration-300 ${
+            isLoading ? 'opacity-0' : 'opacity-100'
+          } hover:opacity-90`}
+          style={{ 
+            aspectRatio: '16/9', // Mobile-friendly 16:9 ratio
+            minHeight: '200px',
+            maxHeight: '300px'
+          }}
+        />
+        
+        {/* Zoom indicator */}
+        {!isLoading && !hasError && (
+          <div className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1 opacity-0 hover:opacity-100 transition-opacity">
+            <span className="text-xs">🔍</span>
+          </div>
+        )}
+      </div>
+
+      {/* Fullscreen modal */}
+      <AnimatePresence>
+        {isFullscreen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 flex items-center justify-center z-[2300] p-4"
+            onClick={closeFullscreen}
+          >
+            <motion.div
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.8 }}
+              className="relative max-w-full max-h-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={imageUrl}
+                alt={alt}
+                className="max-w-full max-h-full object-contain rounded-lg"
+              />
+              
+              {/* Close button */}
+              <button
+                onClick={closeFullscreen}
+                className="absolute top-4 right-4 bg-black/50 text-white rounded-full w-10 h-10 flex items-center justify-center hover:bg-black/70 transition-colors"
+              >
+                ✕
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  )
+}
 
 const MessageBubble = ({ msg, user, onUserClick }) => {
   const isOwnMessage = msg.isMyMessage;
@@ -143,7 +251,6 @@ const UserProfileModal = ({ isOpen, onClose, messageUser, currentUser, event }) 
     }
   };
 
-  // Use crypto identity
   const isOwnProfile = messageUser.portalPubkey === idStore.getPortalIdent(event?.portalId).publicKey;
   const isFriend = messageUser.isFriend;
 
@@ -267,8 +374,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
 
-  // IMPORTANT: Always call hooks with consistent parameters to maintain hook order
-  // Pass null portalId when modal is closed to ensure hook consistency
+  // Always call hooks with consistent parameters to maintain hook order
   const portalId = isOpen ? event?.portalId : null
   const { messages, loading: messagesLoading, sendMessage } = useP2PMessages(portalId, user)
 
@@ -289,7 +395,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
     }
   }, [isOpen, activeTab]);
 
-    // Early return AFTER all hooks have been called
+  // Early return AFTER all hooks have been called
   if (!isOpen || !event) return null
 
   const userAddress = user?.address;
@@ -413,7 +519,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="p-6 border-b border-gray-700 flex-shrink-0">
+          <div className="pl-5 pt-4 pr-4 border-b border-gray-700 flex-shrink-0">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="text-3xl">{event.emoji}</div>
@@ -427,12 +533,6 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
               >
                 ✕
               </button>
-            </div>
-
-            {/* Status */}
-            <div className={`flex items-center gap-2 ${status.color} font-medium`}>
-              <span>{status.icon}</span>
-              <span>{status.label}</span>
             </div>
           </div>
 
@@ -481,10 +581,20 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
           <div className="flex-1 overflow-hidden flex flex-col">
             {activeTab === 'details' && (
               <div className="p-6 space-y-4 overflow-y-auto">
+                {/* Event Image - Display above description with mobile-friendly ratio */}
+                {(event.imageUrl || event.image_url) && (
+                  <div className="mb-4">
+                    <EventImage
+                      imageUrl={event.imageUrl || event.image_url}
+                      alt={`${event.title} event image`}
+                      className="w-full"
+                    />
+                  </div>
+                )}
+
                 {/* Description */}
                 {event.description && (
                   <div>
-                    <h4 className="text-sm font-medium text-gray-300 mb-2">Description</h4>
                     <p className="text-gray-100 text-sm leading-relaxed">{event.description}</p>
                   </div>
                 )}
@@ -651,7 +761,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
             </div>
           )}
 
-          {/* FIXED Action Buttons */}
+          {/* Action Buttons */}
           {activeTab !== 'chat' && (
             <div className="p-6 border-t border-gray-700 flex-shrink-0">
               {hasEnded ? (

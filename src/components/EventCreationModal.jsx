@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Picker from '@emoji-mart/react'
 import data from '@emoji-mart/data'
+import ImageUpload from './ImageUpload'
 
-// Custom calendar picker that slides up from bottom like iOS
+// Mobile calendar picker component (unchanged)
 const MobileCalendarPicker = ({ isOpen, onClose, value, onChange }) => {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(value || '')
@@ -30,12 +31,10 @@ const MobileCalendarPicker = ({ isOpen, onClose, value, onChange }) => {
 
     const days = []
     
-    // Add empty cells for days before the first day of the month
     for (let i = 0; i < startingDayOfWeek; i++) {
       days.push(null)
     }
     
-    // Add all days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
       const isToday = dateStr === new Date().toISOString().split('T')[0]
@@ -86,14 +85,12 @@ const MobileCalendarPicker = ({ isOpen, onClose, value, onChange }) => {
           className="bg-gray-800 rounded-t-2xl w-full max-w-md border-t border-gray-700"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header */}
           <div className="flex justify-between items-center p-4 border-b border-gray-700">
             <button onClick={onClose} className="text-blue-400 font-medium">Cancel</button>
             <h3 className="text-lg font-medium text-white">Select Date</h3>
             <button onClick={handleConfirm} className="text-blue-400 font-medium">Done</button>
           </div>
 
-          {/* Month Navigation */}
           <div className="flex justify-between items-center p-4 border-b border-gray-700">
             <button
               onClick={() => navigateMonth(-1)}
@@ -110,9 +107,7 @@ const MobileCalendarPicker = ({ isOpen, onClose, value, onChange }) => {
             </button>
           </div>
 
-          {/* Calendar Grid */}
           <div className="p-4">
-            {/* Week day headers */}
             <div className="grid grid-cols-7 gap-1 mb-2">
               {weekDays.map(day => (
                 <div key={day} className="text-center text-gray-400 text-sm font-medium py-2">
@@ -121,7 +116,6 @@ const MobileCalendarPicker = ({ isOpen, onClose, value, onChange }) => {
               ))}
             </div>
 
-            {/* Calendar days */}
             <div className="grid grid-cols-7 gap-1">
               {days.map((day, index) => (
                 <div key={index} className="aspect-square">
@@ -149,7 +143,6 @@ const MobileCalendarPicker = ({ isOpen, onClose, value, onChange }) => {
             </div>
           </div>
 
-          {/* Quick Date Buttons */}
           <div className="px-4 pb-4">
             <div className="grid grid-cols-3 gap-2">
               {[
@@ -179,7 +172,7 @@ const MobileCalendarPicker = ({ isOpen, onClose, value, onChange }) => {
   )
 }
 
-// Mobile-friendly time picker with 24-hour format
+// Mobile time picker component (unchanged)
 const MobileTimePicker = ({ isOpen, onClose, value, onChange }) => {
   const [selectedHour, setSelectedHour] = useState('12')
   const [selectedMinute, setSelectedMinute] = useState('00')
@@ -219,17 +212,14 @@ const MobileTimePicker = ({ isOpen, onClose, value, onChange }) => {
           className="bg-gray-800 rounded-t-2xl w-full max-w-md border-t border-gray-700"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header */}
           <div className="flex justify-between items-center p-4 border-b border-gray-700">
             <button onClick={onClose} className="text-blue-400 font-medium">Cancel</button>
             <h3 className="text-lg font-medium text-white">Select Time</h3>
             <button onClick={handleConfirm} className="text-blue-400 font-medium">Done</button>
           </div>
 
-          {/* Time Picker Wheels */}
           <div className="flex justify-center items-center py-6">
             <div className="flex items-center space-x-4">
-              {/* Hour Wheel (24-hour format) */}
               <div className="flex flex-col items-center">
                 <select
                   value={selectedHour}
@@ -244,7 +234,6 @@ const MobileTimePicker = ({ isOpen, onClose, value, onChange }) => {
 
               <span className="text-white text-xl font-bold">:</span>
 
-              {/* Minute Wheel */}
               <div className="flex flex-col items-center">
                 <select
                   value={selectedMinute}
@@ -271,7 +260,8 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
     description: '',
     startDate: '',
     startTime: '',
-    duration: ''
+    duration: '',
+    image: null
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -285,17 +275,26 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
     setShowEmojiPicker(false)
   }
 
+  const handleImageUploaded = (imageData) => {
+    setEventData(prev => ({ ...prev, image: imageData }))
+    if (imageData) {
+      console.log('Image uploaded successfully:', imageData)
+    }
+  }
+
   useEffect(() => {
     if (isOpen) {
       const now = new Date()
+      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const formatDate = (date) => date.toISOString().split('T')[0]
       const formatTime = (date) => date.toTimeString().slice(0, 5)
       
       setEventData(prev => ({
         ...prev,
-        startDate: formatDate(now),
+        startDate: formatDate(tomorrow),
         startTime: formatTime(now),
-        duration: ''
+        duration: '',
+        image: null
       }))
       setSliderTouched(false)
     }
@@ -311,7 +310,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
     }
 
     if (!eventData.emoji) {
-      setError('Please select an emoji for your event - click the emoji button to choose one')
+      setError('Your event needs a vibe - click the alien emoji to pick one')
       setTimeout(() => setError(null), 5000)
       return
     }
@@ -323,7 +322,13 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
     }
 
     if (!eventData.duration) {
-      setError('Please select a duration for your event')
+      setError('Use the slider to chose your event duration')
+      setTimeout(() => setError(null), 5000)
+      return
+    }
+
+    if (!eventData.image) {
+      setError('Click the camera icon to add an image for your event')
       setTimeout(() => setError(null), 5000)
       return
     }
@@ -332,7 +337,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
     const endDateTime = new Date(startDateTime.getTime() + (eventData.duration * 60 * 60 * 1000))
 
     if (startDateTime < new Date()) {
-      setError('Event cannot be scheduled in the past - please choose a future date and time')
+      setError('Event must be scheduled in the future')
       setTimeout(() => setError(null), 5000)
       return
     }
@@ -358,7 +363,9 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
         longitude: location.lng,
         startDateTime: startDateTime.toISOString(),
         endDateTime: endDateTime.toISOString(),
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        imageUrl: eventData.image?.url || null,
+        imageIpfsHash: eventData.image?.ipfsHash || null
       }
 
       await onCreateEvent(eventPayload)
@@ -369,7 +376,8 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
         description: '',
         startDate: '',
         startTime: '',
-        duration: ''
+        duration: '',
+        image: null
       })
       setSliderTouched(false)
       
@@ -387,13 +395,11 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
     }
   }
 
-  // Handle slider interactions
   const handleSliderChange = (e) => {
     setSliderTouched(true)
     setEventData(prev => ({ ...prev, duration: parseFloat(e.target.value) }))
   }
 
-  // Prevent modal close when interacting with slider
   const handleSliderMouseDown = (e) => {
     e.stopPropagation()
   }
@@ -414,7 +420,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
 
   const formatDisplayTime = (timeString) => {
     if (!timeString) return 'Select time'
-    return timeString // Simply return the 24-hour format as-is (e.g., "09:30", "15:45")
+    return timeString
   }
 
   if (!isOpen) return null
@@ -426,7 +432,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[2000] p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-[2000] p-2 pt-4"
           onClick={onClose}
         >
           <motion.div
@@ -434,19 +440,16 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.8, opacity: 0, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="bg-gray-800 rounded-2xl p-6 w-full max-w-md max-h-[90vh] border border-gray-700 shadow-2xl flex flex-col"
+            className="bg-gray-800 rounded-2xl p-6 w-full max-w-md h-[calc(100vh-2rem)] border border-gray-700 shadow-2xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={handleKeyPress}
           >
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4 flex-shrink-0">
               <div>
                 <h2 className="text-xl font-semibold text-gray-100 flex items-center gap-2">
                   Create Event
                   {eventData.emoji && <span className="text-2xl">{eventData.emoji}</span>}
                 </h2>
-                <p className="text-sm text-gray-400">
-                  Location: {location?.lat.toFixed(4)}, {location?.lng.toFixed(4)}
-                </p>
               </div>
               <button
                 onClick={onClose}
@@ -456,15 +459,15 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
               </button>
             </div>
 
-            {/* Separate scrollable content from slider */}
             <div className="flex-1 overflow-hidden flex flex-col">
-              {/* Scrollable content */}
-              <div className="flex-1 space-y-4 pr-2">
+              {/* Scrollable content area - maximized height */}
+              <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Event Emoji & Title *
+                    Event Title & Vibe
                   </label>
                   <div className="flex gap-2 relative">
+                    {/* Emoji picker button */}
                     <div className="relative">
                       <button
                         type="button"
@@ -513,6 +516,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                       </AnimatePresence>
                     </div>
 
+                    {/* Title input */}
                     <input
                       type="text"
                       value={eventData.title}
@@ -522,9 +526,21 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                       maxLength={100}
                       autoFocus
                     />
+   
+                    {/* Image upload button */}
+                    <ImageUpload
+                      onImageUploaded={handleImageUploaded}
+                      currentImage={eventData.image}
+                    />
                   </div>
                   {!eventData.emoji && (
-                    <p className="text-xs text-gray-400 mt-1">Click the emoji button to select an emoji</p>
+                    <p className="text-xs text-gray-400 mt-1">* click the alien to set the vibe and the camera to add a pic</p>
+                  )}
+                  {eventData.image && (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+                      <span className="text-green-400">✓</span>
+                      <span>Image uploaded: {eventData.image.originalName}</span>
+                    </div>
                   )}
                 </div>
 
@@ -574,125 +590,108 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                   </div>
                 </div>
 
-              {/* Slider outside scrollable area */}
-              <div className="flex-shrink-0 mt-4 pt-4 border-t border-gray-700">
-                <label className="block text-sm font-medium text-gray-300 mb-3">
-                  Event Duration: {eventData.duration || 1} hour{(eventData.duration || 1) === 1 ? '' : 's'}
-                </label>
-                <div 
-                  className="relative px-1"
-                  onMouseDown={handleSliderMouseDown}
-                  onTouchStart={handleSliderTouchStart}
-                >
-                  <input
-                    type="range"
-                    min="1"
-                    max="6"
-                    step="0.5"
-                    value={eventData.duration || 1}
-                    onChange={handleSliderChange}
+                {/* Duration slider - moved inside scrollable area */}
+                <div className="mt-3 pt-3 border-t border-gray-700">
+                  <label className="block text-sm font-medium text-gray-300 mb-3">
+                    Event Duration: {eventData.duration || 1} hour{(eventData.duration || 1) === 1 ? '' : 's'}
+                  </label>
+                  <div 
+                    className="relative px-1"
                     onMouseDown={handleSliderMouseDown}
                     onTouchStart={handleSliderTouchStart}
-                    className="w-full h-3 bg-gray-600 rounded-lg appearance-none cursor-pointer touch-manipulation
-                              [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 
-                              [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gradient-to-br 
-                              [&::-webkit-slider-thumb]:from-blue-500 [&::-webkit-slider-thumb]:to-purple-600 
-                              [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-2 
-                              [&::-webkit-slider-thumb]:border-gray-800 [&::-webkit-slider-thumb]:shadow-lg 
-                              [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110
-                              [&::-webkit-slider-thumb]:active:scale-125
-                              [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:rounded-full 
-                              [&::-moz-range-thumb]:bg-gradient-to-br [&::-moz-range-thumb]:from-blue-500 
-                              [&::-moz-range-thumb]:to-purple-600 [&::-moz-range-thumb]:cursor-pointer 
-                              [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-gray-800 
-                              [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:border-none
-                              [&::-moz-range-track]:bg-gray-600 [&::-moz-range-track]:rounded-lg [&::-moz-range-track]:h-3"
-                    style={{
-                      background: sliderTouched 
-                        ? `linear-gradient(to right, 
-                            #3b82f6 0%, 
-                            #3b82f6 ${((eventData.duration || 1) - 1) / 5 * 100}%, 
-                            #4b5563 ${((eventData.duration || 1) - 1) / 5 * 100}%, 
-                            #4b5563 100%)`
-                        : '#4b5563',
-                      touchAction: 'manipulation',
-                      padding: '0 3px'
-                    }}
-                  />
-                  <div className="flex justify-between text-xs text-gray-400 mt-2 px-1">
-                    <span>1h</span>
-                    <span>2h</span>
-                    <span>3h</span>
-                    <span>4h</span>
-                    <span>5h</span>
-                    <span>6h</span>
-                  </div>
-                  
-                  <div className="absolute -top-8 right-1 text-lg pointer-events-none">
-                    <span className={`transition-all duration-200 ${(eventData.duration || 1) >= 6 ? 'opacity-100 scale-110' : 'opacity-50'}`}>⚡</span>
+                  >
+                    <input
+                      type="range"
+                      min="1"
+                      max="6"
+                      step="0.5"
+                      value={eventData.duration || 1}
+                      onChange={handleSliderChange}
+                      onMouseDown={handleSliderMouseDown}
+                      onTouchStart={handleSliderTouchStart}
+                      className="w-full h-3 bg-gray-600 rounded-lg appearance-none cursor-pointer touch-manipulation
+                                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 
+                                [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gradient-to-br 
+                                [&::-webkit-slider-thumb]:from-blue-500 [&::-webkit-slider-thumb]:to-purple-600 
+                                [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-2 
+                                [&::-webkit-slider-thumb]:border-gray-800 [&::-webkit-slider-thumb]:shadow-lg 
+                                [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110
+                                [&::-webkit-slider-thumb]:active:scale-125
+                                [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:rounded-full 
+                                [&::-moz-range-thumb]:bg-gradient-to-br [&::-moz-range-thumb]:from-blue-500 
+                                [&::-moz-range-thumb]:to-purple-600 [&::-moz-range-thumb]:cursor-pointer 
+                                [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-gray-800 
+                                [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:border-none
+                                [&::-moz-range-track]:bg-gray-600 [&::-moz-range-track]:rounded-lg [&::-moz-range-track]:h-3"
+                      style={{
+                        background: sliderTouched 
+                          ? `linear-gradient(to right, 
+                              #3b82f6 0%, 
+                              #3b82f6 ${((eventData.duration || 1) - 1) / 5 * 100}%, 
+                              #4b5563 ${((eventData.duration || 1) - 1) / 5 * 100}%, 
+                              #4b5563 100%)`
+                          : '#4b5563',
+                        touchAction: 'manipulation',
+                        padding: '0 3px'
+                      }}
+                    />
+                    <div className="flex justify-between text-xs text-gray-400 mt-2 px-1">
+                      <span>1h</span>
+                      <span>2h</span>
+                      <span>3h</span>
+                      <span>4h</span>
+                      <span>5h</span>
+                      <span>6h</span>
+                    </div>
+                    
+                    <div className="absolute -top-8 right-1 text-lg pointer-events-none">
+                      <span className={`transition-all duration-200 ${(eventData.duration || 1) >= 6 ? 'opacity-100 scale-110' : 'opacity-50'}`}>⚡</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-           <div className="mt-2">
-            {/* Show error if exists, otherwise show end time */}
-            {error ? (
-              <motion.div 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-3 bg-red-900/50 border border-red-700 rounded-lg"
-              >
-                <p className="text-red-300 text-sm">{error}</p>
-              </motion.div>
-            ) : (
-              eventData.startDate && eventData.startTime && eventData.duration && (
-                <div className="text-sm text-gray-400 bg-gray-700/50 p-3 rounded-lg">
-                  <span className="font-medium">Event ends at: </span> 
-                  <span className="text-gray-300">
-                  {
-                    (() => {
-                      const start = new Date(`${eventData.startDate}T${eventData.startTime}`)
-                      const end = new Date(start.getTime() + (eventData.duration * 60 * 60 * 1000))
-                      return end.toLocaleString('en-US', {
-                        weekday: 'short',
-                        month: 'short', 
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })
-                    })()
-                  }
-                  </span>
+
+              {/* Fixed bottom section with error/status and buttons */}
+              <div className="flex-shrink-0 pt-3 border-t border-gray-700 bg-gray-800">
+                {/* Show error if exists */}
+                {error && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-2 bg-red-900/50 border border-red-700 rounded-lg mb-3"
+                  >
+                    <p className="text-red-300 text-sm">{error}</p>
+                  </motion.div>
+                )}
+                
+                {/* Action buttons - always visible at bottom */}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl font-medium transition-colors border border-gray-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={validateAndCreateEvent}
+                    disabled={isLoading}
+                    className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isLoading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <span>Creating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-lg">{eventData.emoji || '📅'}</span>
+                        <span>Create Event</span>
+                      </>
+                    )}
+                  </button>
                 </div>
-              )
-            )}
-          </div>
-              <div className="flex gap-3 pt-4 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl font-medium transition-colors border border-gray-600"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={validateAndCreateEvent}
-                  disabled={isLoading}
-                  className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {isLoading ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                      <span>Creating...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-lg">{eventData.emoji || '📅'}</span>
-                      <span>Create Event</span>
-                    </>
-                  )}
-                </button>
               </div>
             </div>
           </motion.div>

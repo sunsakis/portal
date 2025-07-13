@@ -6,7 +6,7 @@ import {
   leaveEvent as leaveSupabaseEvent,
   cancelEvent as cancelSupabaseEvent,
   fetchEvents as fetchSupabaseEvents
-} from '../supabase/events';
+} from '../services/supabase';
 import {
   frenRequests,
   idStore,
