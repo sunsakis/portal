@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useP2PMessages } from '../hooks/hooks'
+import { useEventSharing } from '../hooks/useEventSharing'
 import {
   getPetName,
   idStore,
@@ -44,7 +45,7 @@ const EventImage = ({ imageUrl, alt, className = "" }) => {
 
   return (
     <>
-      <div className={`relative overflow-hidden rounded-t-2xl ${className}`}>
+      <div className={`relative overflow-hidden rounded-t-xl ${className}`}>
         {/* Loading skeleton */}
         {isLoading && (
           <div className="absolute inset-0 bg-gray-700 animate-pulse flex items-center justify-center">
@@ -366,6 +367,10 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('details')
   
+  // Add sharing functionality
+  const [copyStatus, setCopyStatus] = useState(null)
+  const { copyEventUrl } = useEventSharing()
+  
   // Chat functionality
   const [message, setMessage] = useState('')
   const [chatError, setChatError] = useState(null)
@@ -394,6 +399,25 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
       setTimeout(() => inputRef.current?.focus(), 300);
     }
   }, [isOpen, activeTab]);
+
+  // Add this new function for copying URL
+  const handleCopyUrl = async () => {
+    if (!event?.share_id) {
+      setCopyStatus({ type: 'error', message: 'Share URL not available' });
+      return;
+    }
+
+    const result = await copyEventUrl(event);
+    
+    if (result.success) {
+      setCopyStatus({ type: 'success', message: 'Link copied to clipboard!' });
+    } else {
+      setCopyStatus({ type: 'error', message: 'Failed to copy link' });
+    }
+
+    // Clear status after 3 seconds
+    setTimeout(() => setCopyStatus(null), 3000);
+  };
 
   // Early return AFTER all hooks have been called
   if (!isOpen || !event) return null
@@ -527,12 +551,14 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
                   <h2 className="text-xl font-semibold text-gray-100">{event.title}</h2>
                 </div>
               </div>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-white text-xl"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={onClose}
+                  className="text-gray-400 hover:text-white text-xl"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           </div>
 
@@ -764,32 +790,76 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
             </div>
           )}
 
-          {/* Action Buttons */}
+           {/* Copy status notification - moved outside action buttons */}
+          {copyStatus && (
+            <div className="px-6 pb-2 flex-shrink-0">
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className={`p-2 rounded-lg text-sm ${
+                  copyStatus.type === 'success'
+                    ? 'bg-green-900/50 text-green-300 border border-green-700'
+                    : 'bg-red-900/50 text-red-300 border border-red-700'
+                }`}
+              >
+                {copyStatus.message}
+              </motion.div>
+            </div>
+          )}
+
+          {/* Action Buttons with Uniform Size and Green Share */}
           {activeTab !== 'chat' && (
             <div className="p-6 border-t border-gray-700 flex-shrink-0">
               {hasEnded ? (
-                <div className="text-center text-gray-400 py-2">
-                  This event has ended
-                </div>
-              ) : isMyEvent ? (
-                // EVENT OWNER: Shows Cancel Event button
                 <div className="flex gap-3">
                   <button
                     onClick={onClose}
                     className="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl font-medium transition-colors border border-gray-600"
                   >
                     Close
+                  </button>
+                  {/* Green Share button in middle */}
+                  <button
+                    onClick={handleCopyUrl}
+                    className="flex-1 py-3 px-4 bg-green-600 hover:bg-green-500 hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] text-white rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                    title="Copy event link"
+                  >
+                    <span className="text-lg">🔗</span>
+                    <span>Share</span>
+                  </button>
+                  <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+                    Event ended
+                  </div>
+                </div>
+              ) : isMyEvent ? (
+                // EVENT OWNER: Close + Share + Cancel
+                <div className="flex gap-3">
+                  <button
+                    onClick={onClose}
+                    className="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl font-medium transition-colors border border-gray-600"
+                  >
+                    Close
+                  </button>
+                  {/* Green Share button in middle */}
+                  <button
+                    onClick={handleCopyUrl}
+                    className="flex-1 py-3 px-4 bg-green-600 hover:bg-green-500 hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] text-white rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                    title="Copy event link"
+                  >
+                    <span className="text-lg">🔗</span>
+                    <span>Share</span>
                   </button>
                   <button
                     onClick={handleCancel}
                     disabled={isLoading}
-                    className="py-3 px-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 py-3 px-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isLoading ? 'Cancelling...' : 'Cancel Event'}
+                    {isLoading ? 'Cancelling...' : 'Cancel'}
                   </button>
                 </div>
               ) : isAttending ? (
-                // ATTENDEE: Shows Leave Event button
+                // ATTENDEE: Close + Share + Leave
                 <div className="flex gap-3">
                   <button
                     onClick={onClose}
@@ -797,18 +867,31 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
                   >
                     Close
                   </button>
-                  {!hasStarted && (
+                  {/* Green Share button in middle */}
+                  <button
+                    onClick={handleCopyUrl}
+                    className="flex-1 py-3 px-4 bg-green-600 hover:bg-green-500 hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] text-white rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                    title="Copy event link"
+                  >
+                    <span className="text-lg">🔗</span>
+                    <span>Share</span>
+                  </button>
+                  {!hasStarted ? (
                     <button
                       onClick={handleLeave}
                       disabled={isLoading}
-                      className="py-3 px-4 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex-1 py-3 px-4 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isLoading ? 'Leaving...' : 'Leave Event'}
+                      {isLoading ? 'Leaving...' : 'Leave'}
                     </button>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+                      Event started
+                    </div>
                   )}
                 </div>
               ) : (
-                // NON-ATTENDEE: Shows Attend button
+                // NON-ATTENDEE: Close + Share + Attend
                 <div className="flex gap-3">
                   <button
                     onClick={onClose}
@@ -816,11 +899,20 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
                   >
                     Close
                   </button>
-                  {!hasStarted && (
+                  {/* Green Share button in middle */}
+                  <button
+                    onClick={handleCopyUrl}
+                    className="flex-1 py-3 px-4 bg-green-600 hover:bg-green-500 hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] text-white rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                    title="Copy event link"
+                  >
+                    <span className="text-lg">🔗</span>
+                    <span>Share</span>
+                  </button>
+                  {!hasStarted ? (
                     <button
                       onClick={handleJoin}
                       disabled={isLoading || (event.max_attendees && (event.attendees || []).length >= event.max_attendees)}
-                      className="py-3 px-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      className="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {isLoading ? (
                         <>
@@ -838,6 +930,10 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
                         </>
                       )}
                     </button>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+                      Event started
+                    </div>
                   )}
                 </div>
               )}

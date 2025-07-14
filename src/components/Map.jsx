@@ -1,14 +1,16 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer } from 'react-leaflet';
-
+import { useEventSharing, useEventByShareId } from '../hooks/useEventSharing';
 import {
   useFriendRequests,
   useGeolocation,
-  useCryptoIdentity, // Updated import
+  useCryptoIdentity,
   useEvents,
 } from '../hooks/hooks';
-import { frenRequests, getWakuStatus } from '../waku/node';
+import { useParams } from 'react-router-dom';
+import { useEventMeta } from '../hooks/useEventMeta';
+import { getWakuStatus } from '../waku/node';
 import { MapControls, MapEventHandler } from './MapControls';
 import MapLayers from './MapLayers';
 import { EventMarkers } from './EventMarkers';
@@ -119,10 +121,8 @@ const ErrorToast = ({ error, onDismiss }) => {
 };
 
 export default function Map() {
-  const { user } = useCryptoIdentity(); // Updated to use crypto identity only
+  const { user } = useCryptoIdentity();
   const { error: geoError, getCurrentLocation, location: userLocation } = useGeolocation();
-  
-  // Updated to use events instead of separate portals and events
   const { 
     events, 
     userEvent, 
@@ -136,6 +136,9 @@ export default function Map() {
     error: eventsError,
     clearError: clearEventsError,
   } = useEvents(user);
+
+  const { shareId } = useParams();
+  const { navigateHome } = useEventSharing();
   
   const { friendRequests, friends, acceptFriendRequest, declineFriendRequest } = useFriendRequests(user);
 
@@ -150,6 +153,7 @@ export default function Map() {
   const [showEventCreation, setShowEventCreation] = useState(false);
   const [eventCreationLocation, setEventCreationLocation] = useState(null);
   const [showEventsOnMap, setShowEventsOnMap] = useState(true);
+  const [hasHandledSharedEvent, setHasHandledSharedEvent] = useState(false);
 
   // Default hardcoded location
   const staticLocation = { latitude: 56.96472220, longitude: 24.01670780 };
@@ -180,6 +184,37 @@ export default function Map() {
       setShowFriendRequests(false);
     }
   }, [friendRequests.length]);
+
+  const { 
+      event: sharedEvent, 
+      loading: sharedEventLoading, 
+      error: sharedEventError 
+    } = useEventByShareId(shareId, user);
+
+  useEffect(() => {
+    if (sharedEvent && !showEventDetails && !hasHandledSharedEvent) {
+      setSelectedEvent(sharedEvent);
+      setShowEventDetails(true);
+      setHasHandledSharedEvent(true); // Mark as handled
+    }
+  }, [sharedEvent, showEventDetails, hasHandledSharedEvent]);
+
+  // Add this to reset the flag
+  useEffect(() => {
+    if (!shareId) {
+      setHasHandledSharedEvent(false);
+    }
+  }, [shareId]);
+
+  useEffect(() => {
+    if (sharedEventError) {
+      setPortalError(`Event not found: ${sharedEventError}`);
+      // Redirect to home after showing error
+      setTimeout(() => {
+        navigateHome();
+      }, 3000);
+    }
+  }, [sharedEventError, navigateHome]);
 
   // Handle event and portal errors
   const currentError = portalError || eventsError;
@@ -247,6 +282,9 @@ export default function Map() {
     return [staticLocation.latitude, staticLocation.longitude];
   }, [userLocation, closestEvent, staticLocation]);
 
+  // Add meta tag management
+  useEventMeta(selectedEvent || sharedEvent);
+
   // Auto-dismiss error after 8 seconds
   useEffect(() => {
     if (currentError) {
@@ -257,34 +295,6 @@ export default function Map() {
     }
   }, [currentError]);
 
-  const handleCreateEvent = async () => {
-    if (!user || isPlacingPin) return;
-
-    setIsPlacingPin(true);
-    setPortalError(null);
-
-    try {
-      const location = await getCurrentLocation();
-      const { data, error } = await createEvent(location);
-
-      if (error) {
-        setPortalError(error);
-      }
-    } catch (err) {
-      const errorMsg = err.message || err.toString();
-      setPortalError(errorMsg);
-    } finally {
-      setIsPlacingPin(false);
-    }
-  };
-
-  const handleCloseEvent = async () => {
-    setPortalError(null);
-    const { error } = await cancelEvent();
-    if (error) {
-      setPortalError(error);
-    }
-  };
 
   const handleEventClick = (event) => {
     setSelectedEvent(event);
@@ -386,6 +396,18 @@ export default function Map() {
       throw err;
     }
   };
+
+  if (shareId && sharedEventLoading) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[2200]">
+        <div className="bg-gray-800 rounded-2xl p-8 m-4 text-center border border-gray-700">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <h3 className="text-lg font-semibold text-white mb-2">Loading Event</h3>
+          <p className="text-gray-400">Fetching event details...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className='relative h-screen w-full overflow-hidden'>

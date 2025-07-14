@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { generateUniqueShareId } from '../utils/shareId';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -72,7 +73,47 @@ export const generateEventId = (latitude, longitude) => {
   return `${x},${y}`;
 };
 
-// Event management functions
+export const fetchEventByShareId = async (shareId, userAddress = null) => {
+  try {
+    console.log('Fetching event by share ID:', shareId);
+
+    // Set user context if provided
+    if (userAddress) {
+      const { error: contextError } = await setUserContext(userAddress);
+      if (contextError) {
+        console.warn('Could not set user context for event fetch:', contextError);
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .eq('share_id', shareId)
+      .eq('is_active', true)
+      .single(); // Expect single result
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return { data: null, error: 'Event not found' };
+      }
+      console.error('Failed to fetch event:', error);
+      return { data: null, error: error.message };
+    }
+
+    // Check if event has expired
+    const now = new Date();
+    const eventEnd = new Date(data.end_datetime);
+    if (eventEnd < now) {
+      return { data: null, error: 'Event has ended' };
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    console.error('Error fetching event by share ID:', err);
+    return { data: null, error: err.message };
+  }
+};
+
 export const createEvent = async (eventData, user) => {
   try {
     console.log('Creating event with address-based system:', eventData);
@@ -83,7 +124,16 @@ export const createEvent = async (eventData, user) => {
       return { data: null, error: `Context error: ${contextError}` };
     }
 
-    // Updated parameter order to match the fixed function signature
+    // Generate guaranteed unique share ID
+    let shareId;
+    try {
+      shareId = await generateUniqueShareId();
+    } catch (shareIdError) {
+      console.error('Failed to generate unique share ID:', shareIdError);
+      return { data: null, error: 'Failed to generate event link. Please try again.' };
+    }
+
+    // Create event with unique share ID
     const { data, error } = await supabase.rpc('check_event_proximity_and_create', {
       p_latitude: eventData.latitude,
       p_longitude: eventData.longitude,
@@ -95,7 +145,8 @@ export const createEvent = async (eventData, user) => {
       p_emoji: eventData.emoji || '🎉',
       p_max_attendees: eventData.maxAttendees || null,
       p_image_url: eventData.imageUrl || null,
-      p_image_ipfs_hash: eventData.imageIpfsHash || null
+      p_image_ipfs_hash: eventData.imageIpfsHash || null,
+      p_share_id: shareId
     });
 
     if (error) {
