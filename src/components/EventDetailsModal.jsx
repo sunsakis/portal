@@ -44,7 +44,7 @@ const EventImage = ({ imageUrl, alt, className = "" }) => {
 
   return (
     <>
-      <div className={`relative overflow-hidden rounded-lg ${className}`}>
+      <div className={`relative overflow-hidden rounded-t-2xl ${className}`}>
         {/* Loading skeleton */}
         {isLoading && (
           <div className="absolute inset-0 bg-gray-700 animate-pulse flex items-center justify-center">
@@ -580,10 +580,10 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
           {/* Content */}
           <div className="flex-1 overflow-hidden flex flex-col">
             {activeTab === 'details' && (
-              <div className="p-6 space-y-4 overflow-y-auto">
-                {/* Event Image - Display above description with mobile-friendly ratio */}
+              <div className="overflow-y-auto">
+                {/* Event Image - Full width at top */}
                 {(event.imageUrl || event.image_url) && (
-                  <div className="mb-4">
+                  <div className="mt-12">
                     <EventImage
                       imageUrl={event.imageUrl || event.image_url}
                       alt={`${event.title} event image`}
@@ -591,54 +591,57 @@ const EventDetailsModal = ({ isOpen, onClose, event, user, onJoin, onLeave, onCa
                     />
                   </div>
                 )}
+                
+                {/* Padded content below image */}
+                <div className="p-6 space-y-4">
+                  {/* Description */}
+                  {event.description && (
+                    <div>
+                      <p className="text-gray-100 text-sm leading-relaxed">{event.description}</p>
+                    </div>
+                  )}
 
-                {/* Description */}
-                {event.description && (
+                  {/* Date and Time */}
                   <div>
-                    <p className="text-gray-100 text-sm leading-relaxed">{event.description}</p>
-                  </div>
-                )}
-
-                {/* Date and Time */}
-                <div>
-                  <h4 className="text-sm font-medium text-gray-300 mb-2">When</h4>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-gray-100">
-                      <span>🗓️</span>
-                      <span>{startTime.date}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-100">
-                      <span>🕐</span>
-                      <span>From {startTime.time} to {endTime.time}</span>
+                    <h4 className="text-sm font-medium text-gray-300 mb-2">When</h4>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-gray-100">
+                        <span>🗓️</span>
+                        <span>{startTime.date}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-gray-100">
+                        <span>🕐</span>
+                        <span>From {startTime.time} to {endTime.time}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Location */}
-                <div>
-                  <h4 className="text-sm font-medium text-gray-300 mb-2">Location</h4>
-                  <div className="flex items-center gap-2 text-gray-100">
-                    <span>📍</span>
-                    <span>{event.latitude.toFixed(4)}, {event.longitude.toFixed(4)}</span>
-                  </div>
-                </div>
-
-                {/* Capacity */}
-                {event.max_attendees && (
+                  {/* Location */}
                   <div>
-                    <h4 className="text-sm font-medium text-gray-300 mb-2">Capacity</h4>
+                    <h4 className="text-sm font-medium text-gray-300 mb-2">Location</h4>
                     <div className="flex items-center gap-2 text-gray-100">
-                      <span>👥</span>
-                      <span>{(event.attendees || []).length} / {event.max_attendees} people</span>
-                    </div>
-                    <div className="mt-2 w-full bg-gray-700 rounded-full h-2">
-                      <div
-                        className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${((event.attendees || []).length / event.max_attendees) * 100}%` }}
-                      />
+                      <span>📍</span>
+                      <span>{event.latitude.toFixed(4)}, {event.longitude.toFixed(4)}</span>
                     </div>
                   </div>
-                )}
+
+                  {/* Capacity */}
+                  {event.max_attendees && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-300 mb-2">Capacity</h4>
+                      <div className="flex items-center gap-2 text-gray-100">
+                        <span>👥</span>
+                        <span>{(event.attendees || []).length} / {event.max_attendees} people</span>
+                      </div>
+                      <div className="mt-2 w-full bg-gray-700 rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${((event.attendees || []).length / event.max_attendees) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
