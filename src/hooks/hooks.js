@@ -74,103 +74,77 @@ export const useCryptoIdentity = () => {
   };
 };
 
-// GPS-only location hook (unchanged)
+// IP-only geolocation hook (simplified)
 export const useGeolocation = () => {
   const [location, setLocation] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const getCurrentLocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      const errorMsg = 'GPS not supported on this device';
-      setError(errorMsg);
-      return Promise.reject(new Error(errorMsg));
-    }
-
+  const getLocationFromIP = useCallback(async () => {
     setLoading(true);
     setError(null);
-
-    return new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        const errorMsg = 'GPS timeout - please try outdoors for better signal';
-        setError(errorMsg);
-        setLoading(false);
-        reject(new Error(errorMsg));
-      }, 20000);
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          clearTimeout(timeoutId);
-
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
-          const acc = position.coords.accuracy;
-
-          if (
-            typeof lat !== 'number' || typeof lng !== 'number' ||
-            isNaN(lat) || isNaN(lng) ||
-            lat < -90 || lat > 90 || lng < -180 || lng > 180
-          ) {
-            const errorMsg = 'Invalid GPS coordinates - please try again';
-            setError(errorMsg);
-            setLoading(false);
-            reject(new Error(errorMsg));
-            return;
-          }
-
-          if (acc && acc > 1000) {
-            const errorMsg = 'GPS signal too weak - please try outdoors';
-            setError(errorMsg);
-            setLoading(false);
-            reject(new Error(errorMsg));
-            return;
-          }
-
-          const newLocation = {
-            latitude: lat,
-            longitude: lng,
-            accuracy: typeof acc === 'number' && !isNaN(acc) ? Math.round(acc) : 100,
-            timestamp: Date.now(),
-          };
-
-          console.log('Valid GPS location:', newLocation);
-          setLocation(newLocation);
-          setLoading(false);
-          resolve(newLocation);
-        },
-        (error) => {
-          clearTimeout(timeoutId);
-          let errorMessage = 'GPS unavailable';
-
-          switch (error.code) {
-            case error.PERMISSION_DENIED:
-              errorMessage = 'Location permission denied. Please allow location access and reload the page.';
-              break;
-            case error.POSITION_UNAVAILABLE:
-              errorMessage = 'GPS unavailable. Please check location settings and try outdoors.';
-              break;
-            case error.TIMEOUT:
-              errorMessage = 'GPS timeout. Try moving outdoors for better signal.';
-              break;
-            default:
-              errorMessage = `GPS error: ${error.message || 'Please try again'}`;
-          }
-
-          console.error('GPS error:', error);
-          setError(errorMessage);
-          setLoading(false);
-          reject(new Error(errorMessage));
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 60000,
-        },
-      );
-    });
+    
+    try {
+      console.log('🌍 Getting location from IP address...');
+      
+      const response = await fetch('https://ipapi.co/json/');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.latitude && data.longitude && !data.error) {
+        const ipLocation = {
+          latitude: data.latitude,
+          longitude: data.longitude,
+          city: data.city,
+          country: data.country_name,
+          region: data.region,
+          timestamp: Date.now(),
+        };
+        
+        console.log('✅ IP location obtained:', `${data.city}, ${data.country_name}`);
+        setLocation(ipLocation);
+        return ipLocation;
+      } else {
+        throw new Error(data.reason || 'Invalid IP geolocation response');
+      }
+    } catch (err) {
+      console.error('❌ IP geolocation failed:', err);
+      
+      // hardcoded location fallback
+      const fallbackLocation = {
+        latitude: 52.5200,
+        longitude: 13.4050,
+        city: 'Berlin',
+        country: 'Germany',
+        region: 'Berlin',
+        isFallback: true,
+        timestamp: Date.now(),
+      };
+      
+      console.log('🏙️ Using fallback location');
+      setLocation(fallbackLocation);
+      setError('Using default location');
+      return fallbackLocation;
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  return { location, error, loading, getCurrentLocation };
+  // Auto-get IP location on mount
+  useEffect(() => {
+    getLocationFromIP();
+  }, [getLocationFromIP]);
+
+  return { 
+    location, 
+    error, 
+    loading, 
+    retry: getLocationFromIP,
+  };
 };
 
 export const useEvents = (user) => {

@@ -63,13 +63,13 @@ const ErrorToast = ({ error, onDismiss }) => {
       };
     }
 
-    if (errorMsg.includes('GPS') || errorMsg.includes('location')) {
+    if (errorMsg.includes('location')) {
       return {
-        icon: '🛰️',
+        icon: '🌍',
         title: 'Location Issue',
         message: errorMsg,
-        color: 'bg-red-500',
-        suggestion: 'Make sure location services are enabled and try moving outdoors',
+        color: 'bg-blue-500',
+        suggestion: 'Location determined from IP address',
       };
     }
 
@@ -122,7 +122,7 @@ const ErrorToast = ({ error, onDismiss }) => {
 
 export default function Map() {
   const { user } = useCryptoIdentity();
-  const { error: geoError, getCurrentLocation, location: userLocation } = useGeolocation();
+  const { error: geoError, location: userLocation, loading: locationLoading } = useGeolocation();
   const { 
     events, 
     userEvent, 
@@ -154,9 +154,6 @@ export default function Map() {
   const [eventCreationLocation, setEventCreationLocation] = useState(null);
   const [showEventsOnMap, setShowEventsOnMap] = useState(true);
   const [hasHandledSharedEvent, setHasHandledSharedEvent] = useState(false);
-
-  // Default hardcoded location
-  const staticLocation = { latitude: 56.96472220, longitude: 24.01670780 };
 
   // Check Waku status periodically
   useEffect(() => {
@@ -223,64 +220,15 @@ export default function Map() {
     clearEventsError();
   };
 
-  // Calculate distance between two coordinates (Haversine formula)
-  const calculateDistance = useCallback((lat1, lon1, lat2, lon2) => {
-    const R = 6371; // Earth's radius in kilometers
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
-      + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
-        * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // Distance in kilometers
-  }, []);
-
-  // Find the closest event to user's location or Berlin if no user location
-  const closestEvent = useMemo(() => {
-    if (!events || events.length === 0) return null;
-
-    const referenceLocation = userLocation || staticLocation;
-
-    let closest = events[0];
-    let minDistance = calculateDistance(
-      referenceLocation.latitude,
-      referenceLocation.longitude,
-      closest.latitude,
-      closest.longitude,
-    );
-
-    for (let i = 1; i < events.length; i++) {
-      const distance = calculateDistance(
-        referenceLocation.latitude,
-        referenceLocation.longitude,
-        events[i].latitude,
-        events[i].longitude,
-      );
-
-      if (distance < minDistance) {
-        minDistance = distance;
-        closest = events[i];
-      }
-    }
-
-    return { event: closest, distance: minDistance };
-  }, [events, userLocation, calculateDistance, staticLocation]);
-
-  // Dynamic map center: user location > closest event > Berlin Prenzlauer Berg
+  // Simplified map center - just use IP-based location
   const mapCenter = useMemo(() => {
-    // Priority 1: User's actual location (most private and relevant)
     if (userLocation) {
       return [userLocation.latitude, userLocation.longitude];
     }
-
-    // Priority 2: Closest event location (shows activity)
-    if (closestEvent?.event) {
-      return [closestEvent.event.latitude, closestEvent.event.longitude];
-    }
-
-    // Priority 3: Berlin Prenzlauer Berg fallback
-    return [staticLocation.latitude, staticLocation.longitude];
-  }, [userLocation, closestEvent, staticLocation]);
+    
+    // This should rarely happen (0.01% of users) since IP geolocation has built-in fallback
+    return [52.5200, 13.4050];
+  }, [userLocation]);
 
   // Add meta tag management
   useEventMeta(selectedEvent || sharedEvent);
@@ -294,7 +242,6 @@ export default function Map() {
       return () => clearTimeout(timer);
     }
   }, [currentError]);
-
 
   const handleEventClick = (event) => {
     setSelectedEvent(event);
@@ -523,11 +470,11 @@ export default function Map() {
         )}
       </AnimatePresence>
 
-      {/* Map Container with Dynamic Center */}
+      {/* Map Container with IP-based Center */}
       <MapContainer
         key={`${mapCenter[0]}-${mapCenter[1]}`}
         center={mapCenter}
-        zoom={10}
+        zoom={userLocation?.isFallback ? 4 : 13} // Zoom out for fallback location
         style={{ height: '100%', width: '100%' }}
         zoomControl={false}
         attributionControl={true}
