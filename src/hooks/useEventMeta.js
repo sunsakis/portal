@@ -4,7 +4,7 @@ export const useEventMeta = (event) => {
   useEffect(() => {
     if (!event) {
       // Reset to default meta tags
-      document.title = 'Create & Discover Events';
+      document.title = 'Local Events';
       updateMetaTag('og:title', 'Create & Discover Events');
       updateMetaTag('og:description', 'Find and host local events, chats.');
       updateMetaTag('og:image', '/og-image.png');

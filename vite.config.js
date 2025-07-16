@@ -11,10 +11,10 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', '*.png'],
       manifest: {
-        name: 'Create & Discover Events',
+        name: 'Local Events',
         short_name: 'Portal',
         description:
-          'Find and host local events, chats.',
+          'Find and host local events.',
         theme_color: '#000000',
         background_color: '#ffffff',
         display: 'standalone',
