@@ -474,7 +474,7 @@ export default function Map() {
       <MapContainer
         key={`${mapCenter[0]}-${mapCenter[1]}`}
         center={mapCenter}
-        zoom={userLocation?.isFallback ? 4 : 10} // Zoom out for fallback location
+        zoom={userLocation?.isFallback ? 4 : 12} // Zoom out for fallback location
         style={{ height: '100%', width: '100%' }}
         zoomControl={false}
         attributionControl={true}

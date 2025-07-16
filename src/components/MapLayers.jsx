@@ -8,7 +8,7 @@ const MapLayers = ({ maptilerApiKey }) => {
   const [retryCount, setRetryCount] = useState(0)
 
   // Use Streets Dark as the fixed default style
-  const currentStyle = 'streets-dark'
+  const currentStyle = 'streets-v2-dark' 
 
   useEffect(() => {
     if (!maptilerApiKey || mapProvider === 'osm') {
