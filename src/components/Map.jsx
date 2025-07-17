@@ -538,7 +538,7 @@ export default function Map() {
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
-              className="bg-black/80 backdrop-blur-sm text-white px-3 py-2 rounded-full text-xs font-medium flex items-center gap-2 border border-red-600/30"
+              className="bg-black/10 backdrop-blur-sm text-white px-3 py-2 rounded-full text-xs font-medium flex items-center gap-2 border border-red-600/30"
             >
               {/* Blinking red dot */}
               <motion.div
@@ -557,7 +557,7 @@ export default function Map() {
               {/* LIVE text */}
               <motion.span
                 animate={{
-                  opacity: [1, 0.7, 1]
+                  opacity: [1, 0.9, 1]
                 }}
                 transition={{
                   duration: 1.5,
