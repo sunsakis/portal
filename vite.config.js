@@ -13,8 +13,7 @@ export default defineConfig({
       manifest: {
         name: 'Local Events',
         short_name: 'Portal',
-        description:
-          'Find and host local events.',
+        description: 'Find and host local events.',
         theme_color: '#000000',
         background_color: '#ffffff',
         display: 'standalone',
@@ -38,13 +37,9 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // OPTION 2: Skip large JS files from precaching
+        // Skip large JS files from precaching for better performance
         globPatterns: ['**/*.{css,html,ico,png,svg,webp}'],
-        globIgnores: ['**/index-*.js'], // Skip large JS bundles
-        
-        // OR OPTION 1: Just increase the limit
-        // maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
-        // globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
+        globIgnores: ['**/index-*.js', '**/assets/*.js'], // Skip JS bundles
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/_/, /\/[^/?]+\.[^/]+$/],
         runtimeCaching: [
@@ -55,7 +50,7 @@ export default defineConfig({
               cacheName: 'maptiler-cache',
               expiration: {
                 maxEntries: 100,
-                maxAgeSeconds: 24 * 60 * 60 * 7,
+                maxAgeSeconds: 24 * 60 * 60 * 7, // 7 days
               },
             },
           },
@@ -66,7 +61,7 @@ export default defineConfig({
               cacheName: 'osm-cache',
               expiration: {
                 maxEntries: 200,
-                maxAgeSeconds: 24 * 60 * 60 * 30,
+                maxAgeSeconds: 24 * 60 * 60 * 30, // 30 days
               },
             },
           },
@@ -77,7 +72,7 @@ export default defineConfig({
               cacheName: 'images-cache',
               expiration: {
                 maxEntries: 100,
-                maxAgeSeconds: 30 * 24 * 60 * 60,
+                maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
               },
             },
           },
@@ -85,6 +80,9 @@ export default defineConfig({
       },
     }),
   ],
+
+  // Ensure proper base path for Vercel
+  base: '/',
 
   define: {
     global: 'globalThis',
@@ -94,10 +92,11 @@ export default defineConfig({
     format: 'es',
   },
 
-  // Production optimizations
+  // Production optimizations for Vercel
   build: {
     target: 'es2020',
     minify: 'terser',
+    sourcemap: false, // Disable sourcemaps for smaller bundle size on Vercel
     terserOptions: {
       compress: {
         drop_console: true,
@@ -106,16 +105,20 @@ export default defineConfig({
     },
     rollupOptions: {
       output: {
+        // More predictable chunk names for Vercel deployments
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
         manualChunks: {
           vendor: ['react', 'react-dom'],
           maps: ['leaflet', 'react-leaflet'],
           ui: ['framer-motion', '@use-gesture/react'],
-          // ADD WAKU TO SEPARATE CHUNK
           crypto: ['eth-crypto', 'viem', 'buffer', 'crypto-browserify'],
+          waku: ['@waku/sdk'], // Separate Waku into its own chunk
         },
       },
     },
-    // INCREASE CHUNK SIZE WARNING LIMIT
+    // Increase chunk size warning limit for large crypto/Waku dependencies
     chunkSizeWarningLimit: 4000, // 4MB instead of 1MB
   },
 
@@ -129,11 +132,18 @@ export default defineConfig({
       'buffer',
     ],
   },
-  resolve: { alias: { buffer: 'buffer/' } },
+
+  resolve: { 
+    alias: { 
+      buffer: 'buffer/' 
+    } 
+  },
+
   server: {
     host: true,
     port: 3000,
   },
+
   preview: {
     host: true,
     port: 4173,
