@@ -333,6 +333,12 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
       return
     }
 
+    if (!eventData.description.trim()) {
+      setError('Please enter the description for your event')
+      setTimeout(() => setError(null), 5000)
+      return
+    }
+
     const startDateTime = new Date(`${eventData.startDate}T${eventData.startTime}`)
     const endDateTime = new Date(startDateTime.getTime() + (eventData.duration * 60 * 60 * 1000))
 
@@ -344,12 +350,6 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
 
     if (eventData.duration > 6) {
       setError('Event duration cannot exceed 6 hours')
-      setTimeout(() => setError(null), 5000)
-      return
-    }
-
-    if (!eventData.description.trim()) {
-      setError('Please enter the description for your event')
       setTimeout(() => setError(null), 5000)
       return
     }
@@ -432,7 +432,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-[2000] p-2 pt-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[2000] p-4"
           onClick={onClose}
         >
           <motion.div
@@ -440,28 +440,32 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.8, opacity: 0, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="bg-gray-800 rounded-2xl p-6 w-full max-w-md h-[calc(100vh-2rem)] border border-gray-700 shadow-2xl flex flex-col"
+            className="bg-gray-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-hidden border border-gray-700 shadow-2xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={handleKeyPress}
           >
-            <div className="flex items-center justify-between mb-4 flex-shrink-0">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-100 flex items-center gap-2">
-                  Create Event
-                  {eventData.emoji && <span className="text-2xl">{eventData.emoji}</span>}
-                </h2>
+            {/* Header - Fixed */}
+            <div className="px-6 pt-4 border-b border-gray-700 flex-shrink-0">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-semibold text-gray-100 flex items-center gap-2">
+                    Create Event
+                    {eventData.emoji && <span className="text-2xl">{eventData.emoji}</span>}
+                  </h2>
+                </div>
+                <button
+                  onClick={onClose}
+                  className="text-gray-400 hover:text-white text-xl"
+                >
+                  ✕
+                </button>
               </div>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-white text-xl"
-              >
-                ✕
-              </button>
             </div>
 
+            {/* Content - Scrollable */}
             <div className="flex-1 overflow-hidden flex flex-col">
-              {/* Scrollable content area - maximized height */}
-              <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {/* Event Title & Vibe */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Event Title & Vibe
@@ -544,6 +548,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                   )}
                 </div>
 
+                {/* Description */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Description
@@ -558,6 +563,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                   />
                 </div>
 
+                {/* Date and Time */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -590,8 +596,8 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                   </div>
                 </div>
 
-                {/* Duration slider - moved inside scrollable area */}
-                <div className="mt-3 pt-3 border-t border-gray-700">
+                {/* Duration slider */}
+                <div>
                   <label className="block text-sm font-medium text-gray-300 mb-3">
                     Event Duration: {eventData.duration || 1} hour{(eventData.duration || 1) === 1 ? '' : 's'}
                   </label>
@@ -650,48 +656,48 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Fixed bottom section with error/status and buttons */}
-              <div className="flex-shrink-0 pt-3 border-t border-gray-700 bg-gray-800">
-                {/* Show error if exists */}
-                {error && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="p-2 bg-red-900/50 border border-red-700 rounded-lg mb-3"
-                  >
-                    <p className="text-red-300 text-sm">{error}</p>
-                  </motion.div>
-                )}
-                
-                {/* Action buttons - always visible at bottom */}
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl font-medium transition-colors border border-gray-600"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={validateAndCreateEvent}
-                    disabled={isLoading}
-                    className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {isLoading ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        <span>Creating...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-lg">{eventData.emoji || '📅'}</span>
-                        <span>Create Event</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+            {/* Footer - Fixed */}
+            <div className="px-6 pb-6 border-t border-gray-700 flex-shrink-0">
+              {/* Error Message */}
+              {error && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-3 bg-red-900/50 border border-red-700 rounded-lg mb-4"
+                >
+                  <p className="text-red-300 text-sm">{error}</p>
+                </motion.div>
+              )}
+              
+              {/* Action buttons */}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl font-medium transition-colors border border-gray-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={validateAndCreateEvent}
+                  disabled={isLoading}
+                  className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      <span>Creating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-lg">{eventData.emoji || '📅'}</span>
+                      <span>Create Event</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </motion.div>
