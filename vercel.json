@@ -1,39 +1,31 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
-      "source": "/((?!assets|favicon.ico|android|ios|splash|ms-icon|browserconfig.xml|og-image.png|twitter-image.png).*)",
+      "source": "/((?!api|_next|_static|favicon.ico|.*\\.).*))",
       "destination": "/index.html"
     }
   ],
   "headers": [
     {
-      "source": "/assets/(.*\\.js)",
+      "source": "/(.*)",
       "headers": [
         {
-          "key": "Content-Type",
-          "value": "application/javascript"
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
         },
         {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
         }
       ]
     },
     {
-      "source": "/assets/(.*\\.css)",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "text/css"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    },
-    {
-      "source": "/assets/(.*\\.(png|jpg|jpeg|gif|svg|webp|ico))",
+      "source": "/(.*)\\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)",
       "headers": [
         {
           "key": "Cache-Control",
@@ -41,5 +33,10 @@
         }
       ]
     }
-  ]
+  ],
+  "functions": {
+    "src/**/*.{js,ts,jsx,tsx}": {
+      "maxDuration": 30
+    }
+  }
 }
