@@ -192,7 +192,7 @@ const MobileTimePicker = ({ isOpen, onClose, value, onChange }) => {
   }
 
   const hours = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'))
-  const minutes = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0')).filter((_, i) => i % 15 === 0)
+  const minutes = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0')).filter((_, i) => i % 5 === 0)
 
   if (!isOpen) return null
 
@@ -470,16 +470,18 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Event Title & Vibe
                   </label>
+                  
+                  {/* Single Row: Emoji + Title + Image Upload */}
                   <div className="flex gap-2 relative">
-                    {/* Emoji picker button */}
-                    <div className="relative">
+                    {/* Emoji picker button - compact */}
+                    <div className="relative flex-shrink-0">
                       <button
                         type="button"
                         onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                        className="h-[42px] w-12 bg-gray-700 border border-gray-600 text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors hover:bg-gray-600 flex items-center justify-center"
+                        className="h-[42px] w-10 bg-gray-700 border border-gray-600 text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors hover:bg-gray-600 flex items-center justify-center"
                       >
                         {eventData.emoji ? (
-                          <span className="text-xl">{eventData.emoji}</span>
+                          <span className="text-lg">{eventData.emoji}</span>
                         ) : (
                           <span className="text-gray-400 text-sm">👽</span>
                         )}
@@ -520,32 +522,43 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                       </AnimatePresence>
                     </div>
 
-                    {/* Title input */}
+                    {/* Title input - takes most space */}
                     <input
                       type="text"
                       value={eventData.title}
                       onChange={(e) => setEventData(prev => ({ ...prev, title: e.target.value }))}
                       placeholder="What's happening?"
-                      className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="flex-1 min-w-0 px-3 py-2 bg-gray-700 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       maxLength={100}
                       autoFocus
                     />
-   
-                    {/* Image upload button */}
-                    <ImageUpload
-                      onImageUploaded={handleImageUploaded}
-                      currentImage={eventData.image}
-                    />
-                  </div>
-                  {!eventData.emoji && (
-                    <p className="text-xs text-gray-400 mt-1">* click the alien to set the vibe and the camera to add a pic</p>
-                  )}
-                  {eventData.image && (
-                    <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
-                      <span className="text-green-400">✓</span>
-                      <span>Image uploaded: {eventData.image.originalName}</span>
+
+                    {/* Image upload button - compact */}
+                    <div className="flex-shrink-0">
+                      <ImageUpload
+                        onImageUploaded={handleImageUploaded}
+                        currentImage={eventData.image}
+                        className="w-10 h-[42px]"
+                      />
                     </div>
-                  )}
+                  </div>
+
+                  {/* Status and helper text below */}
+                  <div className="mt-2 space-y-1">
+                    {eventData.image && (
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
+                        <span className="text-green-400">✓</span>
+                        <span className="truncate">Image: {eventData.image.originalName}</span>
+                      </div>
+                    )}
+                    {(!eventData.emoji || !eventData.image) && (
+                      <p className="text-xs text-gray-400">
+                        {!eventData.emoji && !eventData.image && "* Click 👽 for vibe, 📷 for image"}
+                        {eventData.emoji && !eventData.image && "* Click 📷 to add an image"}
+                        {!eventData.emoji && eventData.image && "* Click 👽 to set the vibe"}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Description */}
@@ -659,7 +672,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
             </div>
 
             {/* Footer - Fixed */}
-            <div className="px-6 pb-6 border-t border-gray-700 flex-shrink-0">
+            <div className="p-6 border-t border-gray-700 flex-shrink-0">
               {/* Error Message */}
               {error && (
                 <motion.div 
@@ -676,7 +689,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl font-medium transition-colors border border-gray-600"
+                  className="flex-1 py-3 px-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl font-medium transition-colors border border-gray-600"
                 >
                   Cancel
                 </button>
@@ -684,7 +697,7 @@ const EventCreationModal = ({ isOpen, onClose, onCreateEvent, location }) => {
                   type="button"
                   onClick={validateAndCreateEvent}
                   disabled={isLoading}
-                  className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 text-white rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isLoading ? (
                     <>
