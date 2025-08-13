@@ -5,7 +5,7 @@ const Footer = ({ events = [], onEventCountClick }) => {
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm text-white py-2 px-4 z-[1500]">
       <div className="flex items-center justify-center gap-4 text-sm">
-        <a 
+        {/* <a 
           href="https://github.com/sunsakis/portal" 
           target="_blank" 
           rel="noopener noreferrer"
@@ -17,13 +17,17 @@ const Footer = ({ events = [], onEventCountClick }) => {
           GitHub
         </a>
         
-        <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+        <div className="w-1 h-1 bg-gray-400 rounded-full"></div> */}
         
         <a 
           href="mailto:dev@portal.live"
-          className="hover:text-blue-400 transition-colors"
+          className="flex items-center gap-1 hover:text-blue-400 transition-colors font-thin"
         >
-          dev@portal.live
+
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+        </svg>
+            dev@portal.live
         </a>
 
         {/* Clickable Event count indicator that centers on closest event */}
