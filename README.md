@@ -5,5 +5,3 @@ Ever wanted to know what's happening around you? Portal enables you to join loca
 ## Getting Started
 
 Visit [portal.live](https://portal.live)
-
-And wait for p2p to establish :)
