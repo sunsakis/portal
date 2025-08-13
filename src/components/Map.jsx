@@ -306,12 +306,6 @@ export default function Map() {
       });
       
       console.log('Map centered on event:', closestEvent.title);
-      
-      // Optional: Show event details after centering
-      setTimeout(() => {
-        setSelectedEvent(closestEvent);
-        setShowEventDetails(true);
-      }, 1000);
     } catch (error) {
       console.error('Error centering map on event:', error);
     }
