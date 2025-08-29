@@ -5,7 +5,7 @@ const Footer = ({ events = [], onEventCountClick }) => {
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm text-white py-2 px-4 z-[1500]">
       <div className="flex items-center justify-center gap-4 text-sm">
-        {/* <a 
+        <a 
           href="https://github.com/sunsakis/portal" 
           target="_blank" 
           rel="noopener noreferrer"
@@ -17,7 +17,7 @@ const Footer = ({ events = [], onEventCountClick }) => {
           GitHub
         </a>
         
-        <div className="w-1 h-1 bg-gray-400 rounded-full"></div> */}
+        <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
         
         <a 
           href="mailto:dev@portal.live"
