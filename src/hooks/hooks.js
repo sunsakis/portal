@@ -116,11 +116,11 @@ export const useGeolocation = () => {
       
       // hardcoded location fallback
       const fallbackLocation = {
-        latitude: 52.5200,
-        longitude: 13.4050,
-        city: 'Berlin',
-        country: 'Germany',
-        region: 'Berlin',
+        latitude: -12.9714,
+        longitude: -38.5014,
+        city: 'Salvador',
+        country: 'Brazil',
+        region: 'Bahia',
         isFallback: true,
         timestamp: Date.now(),
       };
