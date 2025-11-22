@@ -4,9 +4,9 @@ import {
 } from "@waku/sdk";
 
 import {
-    portal_message_decoder, 
     PortalMessageDataPacket,
-    PortalMessage 
+    PortalMessage,
+    TOPIC_PORTALS_MESSAGE
 } from "./node";
 
 //TODO: Add SDS
@@ -37,7 +37,7 @@ export class MessageStore {
             console.log('📝 Attempting store query with pagination options...');
             
             await this.node.store.queryWithOrderedCallback(
-                [portal_message_decoder], // Fixed: should be array, not Object.values()
+                [this.node.createDecoder({ contentTopic: TOPIC_PORTALS_MESSAGE })], // Fixed: should be array, not Object.values()
                 (message: IDecodedMessage) => {
                     try {
                         if (!message.payload) {
@@ -70,7 +70,7 @@ export class MessageStore {
             const MAX_MESSAGES = 100;
 
             await this.node.store.queryWithOrderedCallback(
-                [portal_message_decoder],
+                                [this.node.createDecoder({ contentTopic: TOPIC_PORTALS_MESSAGE })],
                 (message: IDecodedMessage) => {
                     if (messageCount >= MAX_MESSAGES) {
                         return;
@@ -158,7 +158,7 @@ export class MessageStore {
         };
 
         await this.node.store.queryWithOrderedCallback(
-            [portal_message_decoder],
+                            [this.node.createDecoder({ contentTopic: TOPIC_PORTALS_MESSAGE })],
             (message: IDecodedMessage) => {
                 try {
                     if (!message.payload) return;

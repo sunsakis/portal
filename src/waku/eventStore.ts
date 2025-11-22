@@ -4,7 +4,7 @@ import {
 } from "@waku/sdk";
 
 import {
-    event_decoder, 
+    TOPIC_EVENTS, 
     EventDataPacket,
     PortalEvent 
 } from "./node";
@@ -33,7 +33,7 @@ export class EventStore {
 
       try {
           await this.node.store.queryWithOrderedCallback(
-              [event_decoder],
+              [this.node.createDecoder({ contentTopic: TOPIC_EVENTS })],
               (message: IDecodedMessage) => {
                   try {
                       if (!message.payload) return;
@@ -142,7 +142,7 @@ export class EventStore {
         };
 
         await this.node.store.queryWithOrderedCallback(
-            [event_decoder],
+            [this.node.createDecoder({ contentTopic: TOPIC_EVENTS })],
             (message: IDecodedMessage) => {
                 try {
                     if (!message.payload) return;

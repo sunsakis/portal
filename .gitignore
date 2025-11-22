@@ -47,3 +47,5 @@ bot/bot.log
 bot.log
 
 /dist
+
+supabase/.temp

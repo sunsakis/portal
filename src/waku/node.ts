@@ -30,37 +30,6 @@ export let wakuIsReady = false;
 export const idStore = new IdentStore();
 export let nickname = 'W3PN hacker';
 
-// Encoders and decoders
-const portal_message_encoder = createEncoder({
-  contentTopic: TOPIC_PORTALS_MESSAGE,
-  pubsubTopicShardInfo: { clusterId: CLUSTER_ID, shard: SHARD_ID },
-});
-
-export const portal_message_decoder = createDecoder(TOPIC_PORTALS_MESSAGE, {
-  clusterId: CLUSTER_ID,
-  shard: SHARD_ID,
-});
-
-const fren_request_encoder = createEncoder({
-  contentTopic: TOPIC_FREN_REQUESTS,
-  pubsubTopicShardInfo: { clusterId: CLUSTER_ID, shard: SHARD_ID },
-});
-
-const fren_request_decoder = createDecoder(TOPIC_FREN_REQUESTS, {
-  clusterId: CLUSTER_ID,
-  shard: SHARD_ID,
-});
-
-const event_encoder = createEncoder({
-  contentTopic: TOPIC_EVENTS,
-  pubsubTopicShardInfo: { clusterId: CLUSTER_ID, shard: SHARD_ID },
-});
-
-export const event_decoder = createDecoder(TOPIC_EVENTS, {
-  clusterId: CLUSTER_ID,
-  shard: SHARD_ID,
-});
-
 // Protobuf message definitions
 export const PortalMessageDataPacket = new protobuf.Type('PortalMessageDataPacket')
   .add(new protobuf.Field('portalId', 1, 'string'))
@@ -284,17 +253,16 @@ const loadHistoricalEventsFromStore = async () => {
 export const createWakuNode = async () => {
   try {
     const node = await createLightNode({
-      networkConfig: {
-        clusterId: CLUSTER_ID,
-        shards: [SHARD_ID],
-      },
-      defaultBootstrap: false,
+      // networkConfig: {
+      //   clusterId: CLUSTER_ID,
+      //   shards: [SHARD_ID],
+      // },
+      defaultBootstrap: true,
       discovery: {
-        dns: false,
+        dns: true,
         peerExchange: true,
-        localPeerCache: false,
+        peerCache: false,
       },
-      autoStart: true,
       numPeersToUse: 2,
     });
 
@@ -303,8 +271,8 @@ export const createWakuNode = async () => {
       node.dial('/dns4/vps-aaa00d52.vps.ovh.ca/tcp/8000/wss/p2p/16Uiu2HAm9PftGgHZwWE3wzdMde4m3kT2eYJFXLZfGoSED3gysofk'),
     ]);
 
-    await node.waitForPeers([Protocols.Filter, Protocols.LightPush]);
     wakuNode = node;
+    await node.waitForPeers();
 
     messageStore = new MessageStore(node);
     eventStore = new EventStore(node);
@@ -452,7 +420,7 @@ const subscribeToMessages = async () => {
   };
 
   try {
-    await wakuNode.filter.subscribe(portal_message_decoder, callback);
+    await wakuNode.filter.subscribe(wakuNode.createDecoder({ contentTopic: TOPIC_PORTALS_MESSAGE}), callback);
   } catch (e) {
     console.error('Real-time message subscription error:', e);
   }
@@ -467,7 +435,9 @@ export const waku_SendPortalMessage = async (message: PortalMessage) => {
     const protoMessage = PortalMessageDataPacket.create(message);
     const serialisedMessage = PortalMessageDataPacket.encode(protoMessage).finish();
 
-    await wakuNode.lightPush.send(portal_message_encoder, {
+    await wakuNode.lightPush.send(wakuNode.createEncoder({
+  contentTopic: TOPIC_PORTALS_MESSAGE,
+}), {
       payload: serialisedMessage,
     });
 
@@ -506,7 +476,7 @@ const subscribeToFrenRequests = async () => {
   };
   
   try {
-    await wakuNode.filter.subscribe(fren_request_decoder, callback);
+    await wakuNode.filter.subscribe(wakuNode.createDecoder({ contentTopic: TOPIC_FREN_REQUESTS }), callback);
   } catch (e) {
     console.error('Friend request subscription error:', e);
   }
@@ -537,7 +507,9 @@ export const waku_SendFrenMessage = async (
   const serialisedMessage = FriendRequestDataPacket.encode(protoMessage).finish();
   
   try {
-    await wakuNode.lightPush.send(fren_request_encoder, {
+    await wakuNode.lightPush.send(wakuNode.createEncoder({
+  contentTopic: TOPIC_FREN_REQUESTS,
+}), {
       payload: serialisedMessage,
     });
   } catch (e) {
@@ -563,7 +535,7 @@ const subscribeToEvents = async () => {
   };
 
   try {
-    await wakuNode.filter.subscribe(event_decoder, callback);
+    await wakuNode.filter.subscribe(wakuNode.createDecoder({ contentTopic: TOPIC_EVENTS }), callback);
   } catch (e) {
     console.error('Event subscription error:', e);
   }
@@ -623,7 +595,9 @@ export const waku_CreateEvent = async (eventData: Omit<PortalEvent, 'id' | 'crea
     const protoMessage = EventDataPacket.create(event);
     const serialisedMessage = EventDataPacket.encode(protoMessage).finish();
 
-    await wakuNode.lightPush.send(event_encoder, {
+    await wakuNode.lightPush.send(wakuNode.createEncoder({
+  contentTopic: TOPIC_EVENTS,
+}), {
       payload: serialisedMessage,
     });
 
@@ -668,7 +642,9 @@ export const waku_JoinEvent = async (eventId: string) => {
     const protoMessage = EventDataPacket.create(updatedEvent);
     const serialisedMessage = EventDataPacket.encode(protoMessage).finish();
 
-    await wakuNode.lightPush.send(event_encoder, {
+    await wakuNode.lightPush.send(wakuNode.createEncoder({
+  contentTopic: TOPIC_EVENTS,
+}), {
       payload: serialisedMessage,
     });
 
@@ -710,7 +686,9 @@ export const waku_LeaveEvent = async (eventId: string) => {
     const protoMessage = EventDataPacket.create(updatedEvent);
     const serialisedMessage = EventDataPacket.encode(protoMessage).finish();
 
-    await wakuNode.lightPush.send(event_encoder, {
+    await wakuNode.lightPush.send(wakuNode.createEncoder({
+  contentTopic: TOPIC_EVENTS,
+}), {
       payload: serialisedMessage,
     });
 
@@ -748,7 +726,9 @@ export const waku_CancelEvent = async (eventId: string) => {
     const protoMessage = EventDataPacket.create(updatedEvent);
     const serialisedMessage = EventDataPacket.encode(protoMessage).finish();
 
-    await wakuNode.lightPush.send(event_encoder, {
+    await wakuNode.lightPush.send(wakuNode.createEncoder({
+  contentTopic: TOPIC_EVENTS,
+}), {
       payload: serialisedMessage,
     });
 
