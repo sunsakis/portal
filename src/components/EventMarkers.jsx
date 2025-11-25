@@ -11,7 +11,7 @@ export const createEventIcon = (category = 'social', isMyEvent = false, attendee
   const pulseColor = '#10B981'
   
   // Truncate title if too long for the marker
-  const truncatedTitle = eventTitle.length > 10 ? eventTitle.substring(0, 10) + '...' : eventTitle.toUpperCase();
+  const truncatedTitle = eventTitle.length > 20 ? eventTitle.substring(0, 20) + '...' : eventTitle.toUpperCase();
 
   return L.divIcon({
     html: `
